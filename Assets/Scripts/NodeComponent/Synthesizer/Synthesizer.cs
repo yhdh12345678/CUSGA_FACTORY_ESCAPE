@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Synthesizer : MonoBehaviour
+public class Synthesizer : MonoBehaviour, IAccessibleNodeAction
 {   
     [Header("观测参数")]
     public Node targetNode;
@@ -78,5 +78,18 @@ public class Synthesizer : MonoBehaviour
 
         StartCoroutine(myNode.PopUpChildNodes(myNode.nodeInfos));
         myNode.hasPopUp = true;
+    }
+
+    public bool ActivateAccessibility()
+    {
+        targetNode ??= NodeMapBuilder.Instance.GetNode(targetNodeID);
+        if (targetNode == null || hasSynthesized)
+        {
+            return targetNode != null;
+        }
+
+        MergeTowNode();
+        hasSynthesized = true;
+        return true;
     }
 }

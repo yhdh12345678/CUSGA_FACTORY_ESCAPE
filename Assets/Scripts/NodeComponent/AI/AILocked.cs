@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class AILocked : MonoBehaviour
+public class AILocked : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("可调整参数")]
     public int submissionTimes;// 剩余提交次数
@@ -49,19 +49,7 @@ public class AILocked : MonoBehaviour
                 // 节点交互内容
                 if(!hasResult)
                 {
-                    tongyi_AI.instance.SubmitTimer = submissionTimes;
-                    DialogSystem.Instance.AICharacter_1.sprite = GameResources.Instance.characters.Find(x => x.name == "8DE").sprite;
-                    UIManager.Instance.UIShow = true;
-                    DialogSystem.Instance.AIDialogPanel.gameObject.SetActive(true);
-                    DialogSystem.Instance.AINameText.text = AIName;
-                    DialogSystem.Instance.AIDialogText.text = openingRemark;
-                    DialogSystem.Instance.PopUpAIDialogPanel();
-                    DialogSystem.Instance.anxietyValue.localScale = new Vector3(GameManager.Instance.currentAnxiety/GameManager.Instance.maxAnxiety, 1, 1);
-                    DialogSystem.Instance.value.text = (GameManager.Instance.currentAnxiety/GameManager.Instance.maxAnxiety * 100).ToString("F0") + "%";
-                    foreach (Image image in DialogSystem.Instance.SubmitTimer)
-                    {
-                        image.color = orange;
-                    }
+                    OpenAIDialog();
                 }
             }
             else
@@ -96,39 +84,33 @@ public class AILocked : MonoBehaviour
 
         if (tongyi_AI.instance.SubmitTimer == 0)
         {
+            tongyi_AI.instance.send_button.interactable = false;
             if (myNode.nodeInfos.Count > 0)
             {
-                DialogSystem.Instance.get_text_in_other_ways("823", "感谢你的努力，陶特","8N");
+                DialogSystem.Instance.get_text_in_other_ways("823", "感谢你的努力，小明","8N");
             }
             else
             {
                 if (GameManager.Instance.CheckAnxietyValue())
                 {
-                    DialogSystem.Instance.get_text_in_other_ways("823", "感谢你的努力，陶特","8N");
+                    DialogSystem.Instance.get_text_in_other_ways("823", "感谢你的努力，小明","8N");
                 }
                 else
                 {
-                    DialogSystem.Instance.get_text_in_other_ways("823","陶特，我感觉不太好......","8AN");
+                    DialogSystem.Instance.get_text_in_other_ways("823","小明，我感觉不太好......","8AN");
                 }
             }
 
             hasResult = true;
         }
+
+        FactoryEscapeAccessibility.UpdateAIStatus(tongyi_AI.instance.SubmitTimer == 0);
     }
 
     private void Update() {
         if (hasResult && DialogSystem.Instance.textFinished && Input.GetMouseButtonDown(0) && DialogSystem.Instance.AIDialogPanel.gameObject.activeSelf)
         {
-            DialogSystem.Instance.AIDialogPanel.gameObject.SetActive(false);
-            UIManager.Instance.UIShow = false;
-            if (myNode.nodeInfos.Count > 0)
-            {
-                StartCoroutine(myNode.PopUpChildNodes(myNode.nodeInfos));
-            }
-            else
-            {
-                CheckAnxietyValue();
-            }
+            CompleteAccessibilityResult();
         }
     }
 
@@ -148,5 +130,63 @@ public class AILocked : MonoBehaviour
             StaticEventHandler.CallGetResult(failCutScene);
             GameManager.Instance.gameState = GameState.Fail;
         }
+    }
+
+    public bool ActivateAccessibility()
+    {
+        if (myNode == null || hasResult)
+        {
+            return AccessibilityResultReady && CompleteAccessibilityResult();
+        }
+
+        OpenAIDialog();
+        return true;
+    }
+
+    public bool AccessibilityResultReady => hasResult && DialogSystem.Instance != null &&
+                                            DialogSystem.Instance.textFinished;
+
+    public bool CompleteAccessibilityResult()
+    {
+        if (!AccessibilityResultReady)
+        {
+            return false;
+        }
+
+        DialogSystem.Instance.AIDialogPanel.gameObject.SetActive(false);
+        UIManager.Instance.UIShow = false;
+        if (myNode.nodeInfos.Count > 0 && !myNode.hasPopUp)
+        {
+            StartCoroutine(myNode.PopUpChildNodes(myNode.nodeInfos));
+            myNode.hasPopUp = true;
+        }
+        else if (myNode.nodeInfos.Count == 0)
+        {
+            CheckAnxietyValue();
+        }
+
+        return true;
+    }
+
+    private void OpenAIDialog()
+    {
+        tongyi_AI.instance.SubmitTimer = submissionTimes;
+        tongyi_AI.instance.send_button.interactable = true;
+        DialogSystem.Instance.AICharacter_1.sprite =
+            GameResources.Instance.characters.Find(x => x.name == "8DE").sprite;
+        UIManager.Instance.UIShow = true;
+        DialogSystem.Instance.AIDialogPanel.gameObject.SetActive(true);
+        DialogSystem.Instance.AINameText.text = AIName;
+        DialogSystem.Instance.AIDialogText.text = openingRemark;
+        DialogSystem.Instance.PopUpAIDialogPanel();
+        DialogSystem.Instance.anxietyValue.localScale = new Vector3(
+            GameManager.Instance.currentAnxiety / GameManager.Instance.maxAnxiety, 1, 1);
+        DialogSystem.Instance.value.text =
+            (GameManager.Instance.currentAnxiety / GameManager.Instance.maxAnxiety * 100).ToString("F0") + "%";
+        foreach (Image image in DialogSystem.Instance.SubmitTimer)
+        {
+            image.color = orange;
+        }
+        FactoryEscapeAccessibility.RefreshScreen();
     }
 }

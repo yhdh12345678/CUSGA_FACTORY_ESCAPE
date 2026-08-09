@@ -63,7 +63,6 @@ public class soundManager : SingletonMonobehaviour<soundManager>
 
     public void PlaySFX(string name)
     {
-        Debug.Log("playSFX");
         Sound s = Array.Find(sfxSounds, x => x.name == name);
         if (s == null)
         {
@@ -95,14 +94,14 @@ public class soundManager : SingletonMonobehaviour<soundManager>
     //渐强播放音乐
     public void PlayMusicInFade(AudioClip music, bool loop=true, bool volume_is_up=true)
     {
-        PlayMusic(music);
-        FadeVolume(volume_is_up);
+        PlayMusic(music, loop);
+        FadeVolume(volume_is_up, false);
     }
 
     public void PlayMusicInFade(string name, bool loop = true, bool volume_is_up = true)
     {
-        PlayMusic(name);
-        FadeVolume(volume_is_up);
+        PlayMusic(name, loop);
+        FadeVolume(volume_is_up, false);
     }
 
     public void StopMusic()
@@ -113,8 +112,7 @@ public class soundManager : SingletonMonobehaviour<soundManager>
     //渐弱停止音乐
     public void StopMusicInFade(bool volume_is_up = false)
     {
-        FadeVolume(volume_is_up);
-        //musicSource.Stop();
+        FadeVolume(volume_is_up, !volume_is_up);
     }
 
     public void PlayTextSound(bool is_use,string soundName="textSound")
@@ -133,7 +131,7 @@ public class soundManager : SingletonMonobehaviour<soundManager>
     /// <summary>
     /// 可调用的渐强渐弱音量控制函数
     /// </summary>
-    private void FadeVolume(bool volume_is_up)
+    private void FadeVolume(bool volume_is_up, bool stopAfterFade)
     {
         float fadeDuration, startVolume, targetVolume;
         if (volume_is_up)
@@ -149,10 +147,12 @@ public class soundManager : SingletonMonobehaviour<soundManager>
              targetVolume = 0.0f;
         }
         StopFadeCoroutine();
-        fadeCoroutine = StartCoroutine(FadeInCoroutine(fadeDuration,startVolume,targetVolume));
+        fadeCoroutine = StartCoroutine(FadeInCoroutine(
+            fadeDuration, startVolume, targetVolume, stopAfterFade));
     }
 
-    private IEnumerator FadeInCoroutine(float fadeDuration,float startVolume,float targetVolume)
+    private IEnumerator FadeInCoroutine(
+        float fadeDuration, float startVolume, float targetVolume, bool stopAfterFade)
     {
         float elapsedTime = 0.0f;
 
@@ -165,6 +165,11 @@ public class soundManager : SingletonMonobehaviour<soundManager>
         }
 
         musicSource.volume = targetVolume;
+        if (stopAfterFade)
+        {
+            musicSource.Stop();
+        }
+        fadeCoroutine = null;
     }
 
     private void StopFadeCoroutine()

@@ -72,6 +72,84 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
         }
     }
 
+    public bool AdvanceForAccessibility()
+    {
+        if (!cutSceneUIPanel.gameObject.activeSelf)
+        {
+            return false;
+        }
+
+        if (!textFinished && !cancelTyping)
+        {
+            cancelTyping = true;
+        }
+        else if (textFinished && textForShow.Count > 0)
+        {
+            if (playingRowText != null)
+            {
+                StopCoroutine(playingRowText);
+            }
+            playingRowText = StartCoroutine(PlayingRowText(textForShow.Dequeue()));
+        }
+        else if (textFinished && textForShow.Count == 0)
+        {
+            animationIndex++;
+            GetNextRowText();
+        }
+
+        return true;
+    }
+
+    public string AccessibilityAnimationState => currentAnimationState;
+
+    public List<string> GetAccessibilityTextLines()
+    {
+        var lines = new List<string>();
+        if (animationIndex < 0 || animationIndex >= cutSceneCellList.Count)
+        {
+            return lines;
+        }
+
+        TextAsset text = cutSceneCellList[animationIndex].text;
+        if (text == null)
+        {
+            return lines;
+        }
+
+        foreach (string row in text.text.Split('\n'))
+        {
+            string[] fields = row.TrimEnd('\r').Split(':');
+            if (fields.Length > 4 && !string.IsNullOrWhiteSpace(fields[4]))
+            {
+                lines.Add(fields[4].Trim());
+            }
+        }
+
+        return lines;
+    }
+
+    public bool AdvancePageForAccessibility()
+    {
+        if (!cutSceneUIPanel.gameObject.activeSelf)
+        {
+            return false;
+        }
+
+        if (playingRowText != null)
+        {
+            StopCoroutine(playingRowText);
+            playingRowText = null;
+        }
+
+        textForShow.Clear();
+        textFinished = true;
+        cancelTyping = false;
+        isPlayingAutoCutScene = false;
+        animationIndex++;
+        GetNextRowText();
+        return true;
+    }
+
     /// <summary>
     /// 恢复初始状态
     /// </summary>
@@ -92,7 +170,17 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
         if (currentAnimationState != animationStateName)
         {
             currentAnimationState = animationStateName;
-            animator.Play(animationStateName);
+            if (FactoryEscapeAccessibility.ReduceMotion)
+            {
+                animator.Play(animationStateName, 0, 1f);
+                animator.Update(0);
+                animator.speed = 0;
+            }
+            else
+            {
+                animator.speed = 1;
+                animator.Play(animationStateName, 0, 0);
+            }
         }
     }
 
@@ -126,7 +214,8 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
             }
         }
 
-        if (cutSceneCellList[animationIndex].isAuto)
+        if (cutSceneCellList[animationIndex].isAuto &&
+            !FactoryEscapeAccessibility.ReduceMotion)
         {
             ShowAutoCutScene(cutSceneCellList[animationIndex]);
         }
@@ -153,7 +242,7 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
         }
         cutSceneUIPanel.gameObject.SetActive(true);
 
-        if (this.cutSceneCellList[animationIndex].isAuto)
+        if (this.cutSceneCellList[animationIndex].isAuto && !FactoryEscapeAccessibility.ReduceMotion)
         {
             ShowAutoCutScene(this.cutSceneCellList[animationIndex]);
         }
@@ -164,6 +253,7 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
 
         UIManager.Instance.UIShow = true;
         isPlayingCutScene = true;
+        FactoryEscapeAccessibility.RefreshScreen();
     }
 
     /// <summary>
@@ -178,7 +268,10 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
             var rows = cutSceneCell.text.text.Split("\n");
             foreach (var row in rows)
             {
-                textForShow.Enqueue(row);
+                if (!string.IsNullOrWhiteSpace(row))
+                {
+                    textForShow.Enqueue(row);
+                }
             }
             if (playingRowText != null)
             {
@@ -221,6 +314,14 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
         string textToPlay = tag[4];
 
         tmpText.color = new Color(R/255f, G/255f, B/255f, A/255f);
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            tmpText.text = textToPlay;
+            cancelTyping = false;
+            textFinished = true;
+            yield break;
+        }
+
         tmpText.text = Setting.stringDefaultValue;
         int index = 0;
         while (!cancelTyping && index < textToPlay.Length-1)
@@ -251,7 +352,10 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
             var rows = cutSceneCell.text.text.Split("\n");
             foreach (var row in rows)
             {
-                textForShow.Enqueue(row);
+                if (!string.IsNullOrWhiteSpace(row))
+                {
+                    textForShow.Enqueue(row);
+                }
             }
 
             if (playingRowText != null)
@@ -302,6 +406,14 @@ public class VideoManager : SingletonMonobehaviour<VideoManager>
         float A = float.Parse(tag[3]);
         string textToPlay = tag[4];
         float time = float.Parse(tag[5]);
+
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            tmpText.color = new Color(R/255f, G/255f, B/255f, A/255f);
+            tmpText.text = textToPlay;
+            textFinished = true;
+            yield break;
+        }
 
         textFinished = false;
 

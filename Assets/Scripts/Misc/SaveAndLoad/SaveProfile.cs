@@ -27,3 +27,18 @@ public record NodeState : SaveProfileData
     public bool hasPopUp;
     public bool isActive;
 }
+
+public record GameProgressState : SaveProfileData
+{
+    public int version;
+    public string saveGeneration;
+    public int levelIndex;
+    public int graphIndex;
+    public List<int> enterNodeGraphTimes;
+    public List<List<string>> nodeIdsInGraph;
+    public float currentAnxiety;
+    public float maxAnxiety;
+    public float rate;
+    public int previousChapterBot;
+    public int level1GetResultTimes;
+}

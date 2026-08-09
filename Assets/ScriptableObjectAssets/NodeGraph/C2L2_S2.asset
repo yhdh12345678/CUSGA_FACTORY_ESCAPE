@@ -340,7 +340,7 @@ MonoBehaviour:
   - 2b6a678e-ab21-410a-88e8-30c4b63732eb
   childrenNodeIdList: []
   audioList: []
-  nodeTextForShow: 
+  nodeTextForShow: "\u7C73\u9EC4\u8272\u5361\u7247\u4E0A\u6563\u5E03\u4E5D\u4E2A\u5706\u70B9\uFF0C\u65C1\u8FB9\u4EE5\u7EA2\u8272\u624B\u5199\u6807\u6CE8\u4E00\u81F3\u4E5D\u7684\u987A\u5E8F\uFF1B\u90E8\u5206\u5706\u70B9\u4E3A\u7070\u8272\uFF0C\u90E8\u5206\u4E3A\u7C89\u7EA2\u8272\u5E76\u5E26\u6709\u56FE\u6848\u3002"
   nodeGraph: {fileID: 11400000}
   nodeType: {fileID: 11400000, guid: 9a25bcc0b8cc1ee4998010a5fa3fe349, type: 2}
   nodeTypeList: {fileID: 11400000, guid: a09d136a66fb65145b1a2ac281ee73e8, type: 2}

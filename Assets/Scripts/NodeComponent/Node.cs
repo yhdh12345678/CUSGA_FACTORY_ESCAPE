@@ -75,6 +75,11 @@ public class Node : MonoBehaviour
         foreach (string childNodeID in childIdList)
         {
             Node childNode = NodeMapBuilder.Instance.GetNode(childNodeID);
+            if (childNode == null)
+            {
+                Debug.LogError($"Node {id} references missing child {childNodeID}.");
+                continue;
+            }
 
             Vector2 direction = new Vector2((childNode.rect.center - rect.center).x, (rect.center - childNode.rect.center).y).normalized;
 
@@ -135,12 +140,20 @@ public class Node : MonoBehaviour
         {
             Node currentNode = childNode.node;
 
-            currentNode.transform.position = transform.position;
-            currentNode.transform.localScale = Vector3.one * 0.3f;
+            currentNode.transform.position = FactoryEscapeAccessibility.ReduceMotion
+                ? transform.position + (Vector3)(childNode.direction * GameManager.Instance.popUpForce)
+                : transform.position;
+            currentNode.transform.localScale = FactoryEscapeAccessibility.ReduceMotion ? Vector3.one : Vector3.one * 0.3f;
             currentNode.gameObject.SetActive(true);
 
             LineCreator.Instance.ShowLine(currentNode);
             soundManager.Instance.PlaySFX("NodeBorn");
+
+            if (FactoryEscapeAccessibility.ReduceMotion)
+            {
+                currentNode.isPopping = false;
+                continue;
+            }
 
             Sequence sequence = DOTween.Sequence();
             sequence.Append(currentNode.transform.DOMove(
@@ -166,12 +179,20 @@ public class Node : MonoBehaviour
         {
             Node currentNode = childNode.node;
 
-            currentNode.transform.position = transform.position;
-            currentNode.transform.localScale = Vector3.one * 0.3f;
+            currentNode.transform.position = FactoryEscapeAccessibility.ReduceMotion
+                ? transform.position + (Vector3)(childNode.direction * GameManager.Instance.popUpForce)
+                : transform.position;
+            currentNode.transform.localScale = FactoryEscapeAccessibility.ReduceMotion ? Vector3.one : Vector3.one * 0.3f;
             currentNode.gameObject.SetActive(true);
 
             LineCreator.Instance.ShowLine(currentNode);
             soundManager.Instance.PlaySFX("NodeBorn");
+
+            if (FactoryEscapeAccessibility.ReduceMotion)
+            {
+                currentNode.isPopping = false;
+                continue;
+            }
 
             Sequence sequence = DOTween.Sequence();
             sequence.Append(currentNode.transform.DOMove(
@@ -189,6 +210,32 @@ public class Node : MonoBehaviour
         }
     }
 
+    public bool ActivateForAccessibility()
+    {
+        if (!gameObject.activeInHierarchy || isPopping || UIManager.Instance.UIShow ||
+            GameManager.Instance.IsSaveAndQuitStarted)
+        {
+            return false;
+        }
+
+        foreach (MonoBehaviour component in GetComponents<MonoBehaviour>())
+        {
+            if (component is IAccessibleNodeAction action)
+            {
+                return action.ActivateAccessibility();
+            }
+        }
+
+        isDragging = false;
+        SendMessage("OnMouseUp", SendMessageOptions.DontRequireReceiver);
+        if (gameObject.activeInHierarchy && !isPopping && !UIManager.Instance.UIShow)
+        {
+            SendMessage("OnMouseUp", SendMessageOptions.DontRequireReceiver);
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// 获取被选中动画
     /// </summary>
@@ -197,6 +244,13 @@ public class Node : MonoBehaviour
         if (!gameObject.activeSelf) return;
         
         soundManager.Instance.PlaySFX("Selected");
+
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            transform.localScale = Vector3.one;
+            spriteRenderer.color = selectedColor;
+            return;
+        }
 
         transform.DOScale(new Vector3(1.1f,1.1f,1),0.2f);
         StartCoroutine(ChangeColor(selectedColor,0.2f));
@@ -208,6 +262,13 @@ public class Node : MonoBehaviour
     public void GetUnSelectedAnimate()
     {
         if (!gameObject.activeSelf) return;
+
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            transform.localScale = Vector3.one;
+            spriteRenderer.color = unSelectedColor;
+            return;
+        }
 
         transform.DOScale(new Vector3(1f,1f,1),0.2f);
         StartCoroutine(ChangeColor(unSelectedColor,0.2f));

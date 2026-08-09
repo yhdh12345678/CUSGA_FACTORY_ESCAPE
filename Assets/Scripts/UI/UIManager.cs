@@ -34,18 +34,25 @@ public class UIManager : SingletonMonobehaviour<UIManager>
     public Transform AnimatorUI;
     [Tooltip("第七关的天空UI")]
     public Transform SkyUI;
-    [Tooltip("暂停按钮UI")]
+    [Tooltip("存档并退出按钮UI")]
     public Transform pauseButton;
 
-    Coroutine OpenPause;    
-    
-
     public bool UIShow = false;
+
+    private void Start()
+    {
+        ConfigureSaveAndQuitButton();
+    }
 
     private void Update() {
         if (nodeTextForShow != null)
         {
             nodeTextForShow.gameObject.SetActive(!UIShow);
+        }
+
+        if (pauseButton != null)
+        {
+            pauseButton.gameObject.SetActive(!UIShow);
         }
     }
 
@@ -92,6 +99,13 @@ public class UIManager : SingletonMonobehaviour<UIManager>
 
         graphNodeUI.gameObject.SetActive(true);
         
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            graphNodeUI.transform.localScale = Vector3.one;
+            UIShow = true;
+            return;
+        }
+
         graphNodeUI.transform.localScale = Vector3.one * 0.3f;
         Sequence sequence = DOTween.Sequence();
         sequence.Append(graphNodeUI.transform.DOScale(new Vector3(1f,0.3f,1),0.1f));
@@ -109,6 +123,13 @@ public class UIManager : SingletonMonobehaviour<UIManager>
         scrollViewContent.GetComponent<TMP_Text>().text = text.text;
 
         textNodeUI.gameObject.SetActive(true);
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            textNodeUI.transform.localScale = Vector3.one;
+            UIShow = true;
+            return;
+        }
+
         textNodeUI.transform.localScale = Vector3.one * 0.3f;
         Sequence sequence = DOTween.Sequence();
         sequence.Append(textNodeUI.transform.DOScale(new Vector3(1f,0.3f,1),0.1f));
@@ -122,6 +143,12 @@ public class UIManager : SingletonMonobehaviour<UIManager>
     public void DisplayAndCloseAILog()
     {
         AIDialogLog.gameObject.SetActive(!AIDialogLog.gameObject.activeSelf);
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            AIDialogLog.transform.localScale = Vector3.one;
+            return;
+        }
+
         AIDialogLog.transform.localScale = Vector3.one * 0.3f;
         Sequence sequence = DOTween.Sequence();
         sequence.Append(AIDialogLog.transform.DOScale(new Vector3(1f,0.3f,1),0.1f));
@@ -132,6 +159,12 @@ public class UIManager : SingletonMonobehaviour<UIManager>
     {
         Image image = backGround.GetComponent<Image>();
         image.color = color;
+
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            image.color = new Color(image.color.r, image.color.g, image.color.b, targetFadeAlpha);
+            yield break;
+        }
 
         float time = 0;
 
@@ -145,15 +178,57 @@ public class UIManager : SingletonMonobehaviour<UIManager>
     }
 
     /// <summary>
-    /// 打开暂停场景
+    /// 保存当前进度并退出游戏
     /// </summary>
-    public void OpenPauseMenu()
+    public void SaveAndQuit()
     {
-        if (OpenPause != null)
+        GameManager.Instance.StartSaveAndQuit();
+    }
+
+    private void ConfigureSaveAndQuitButton()
+    {
+        if (pauseButton == null)
         {
-            StopCoroutine(OpenPause);
+            return;
         }
-        OpenPause = StartCoroutine(GameManager.Instance.LoadPauseMenu());
+
+        pauseButton.name = "SaveAndQuit";
+        if (pauseButton is RectTransform buttonRect)
+        {
+            buttonRect.sizeDelta = new Vector2(220f, 56f);
+        }
+
+        Image buttonImage = pauseButton.GetComponent<Image>();
+        if (buttonImage != null)
+        {
+            buttonImage.sprite = null;
+            buttonImage.color = new Color(0.08f, 0.08f, 0.08f, 0.9f);
+        }
+
+        var labelObject = new GameObject("Label", typeof(RectTransform));
+        labelObject.transform.SetParent(pauseButton, false);
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = Vector2.zero;
+        labelRect.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI label = labelObject.AddComponent<TextMeshProUGUI>();
+        label.text = "存档并退出";
+        label.alignment = TextAlignmentOptions.Center;
+        label.color = Color.white;
+        label.enableAutoSizing = true;
+        label.fontSizeMin = 20f;
+        label.fontSizeMax = 32f;
+        label.raycastTarget = false;
+
+        TMP_Text visibleText = nodeTextForShow == null
+            ? null
+            : nodeTextForShow.GetComponent<TMP_Text>();
+        if (visibleText != null)
+        {
+            label.font = visibleText.font;
+        }
     }
     
     /// <summary>

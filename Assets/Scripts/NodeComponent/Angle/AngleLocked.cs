@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [DisallowMultipleComponent]
-public class AngleLocked : MonoBehaviour
+public class AngleLocked : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("可调整参数")]
     public GameObject pointerPrefab;
@@ -136,5 +136,18 @@ public class AngleLocked : MonoBehaviour
             Debug.Log("指针数量与角度列表数量不匹配");
             return false;
         }
+    }
+
+    public bool ActivateAccessibility()
+    {
+        if (myNode == null || myNode.hasPopUp)
+        {
+            return myNode != null;
+        }
+
+        ClearAllPointers();
+        StartCoroutine(myNode.PopUpChildNodes(myNode.nodeInfos));
+        myNode.hasPopUp = true;
+        return true;
     }
 }

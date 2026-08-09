@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class CipherLocked : MonoBehaviour
+public class CipherLocked : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("可调整参数")]
     public GameObject cipherPrefab;
@@ -135,6 +135,20 @@ public class CipherLocked : MonoBehaviour
             return false;
         }
 
+        return true;
+    }
+
+    public bool ActivateAccessibility()
+    {
+        if (myNode == null || myNode.hasPopUp)
+        {
+            return myNode != null;
+        }
+
+        DestroyAllCipherNode();
+        StartCoroutine(myNode.PopUpChildNodes(myNode.nodeInfos));
+        hasPopUpCipherNode = true;
+        myNode.hasPopUp = true;
         return true;
     }
 }

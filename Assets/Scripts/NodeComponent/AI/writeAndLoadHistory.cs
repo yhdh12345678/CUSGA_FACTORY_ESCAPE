@@ -7,6 +7,11 @@ using System.Linq.Expressions;
 public class writeAndLoadHistory : MonoBehaviour
 {
     public static writeAndLoadHistory instance;
+    private static string HistoryFolderPath =>
+        Path.Combine(Application.persistentDataPath, "chatHistory");
+    private static string HistoryFilePath =>
+        Path.Combine(HistoryFolderPath, "chatHistory.txt");
+
     private void Awake()
     {
         if (instance != null)
@@ -19,8 +24,8 @@ public class writeAndLoadHistory : MonoBehaviour
     static public void writeText(string[] write_content)
     {
         // 检查文件夹是否存在，不存在则创建
-        string folderPath = Application.dataPath + "/chatHistory";
-        string filePath = folderPath + "/chatHistory.txt";
+        string folderPath = HistoryFolderPath;
+        string filePath = HistoryFilePath;
 
         // 检查文件夹是否存在，不存在则创建
         if (!Directory.Exists(folderPath))
@@ -76,8 +81,8 @@ public class writeAndLoadHistory : MonoBehaviour
 
     static public void loadmodel(int name) 
     {
-        string folderPath = Application.dataPath + "/chatHistory";
-        string filePath = folderPath + "/chatHistory.txt";
+        string folderPath = HistoryFolderPath;
+        string filePath = HistoryFilePath;
         // 获取对应关卡的AI模板
         string content = GameResources.Instance.botTextAsset[name - 1].text;
         // 检查文件夹是否存在，不存在则创建
@@ -102,8 +107,7 @@ public class writeAndLoadHistory : MonoBehaviour
     
     static public void clearHistory()
     {
-        string folderPath = Application.dataPath + "/chatHistory";
-        string filePath = folderPath + "/chatHistory.txt";
-        File.WriteAllText(filePath, string.Empty);
+        Directory.CreateDirectory(HistoryFolderPath);
+        File.WriteAllText(HistoryFilePath, string.Empty);
     }
 }

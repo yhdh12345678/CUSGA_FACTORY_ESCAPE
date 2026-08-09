@@ -23,6 +23,11 @@ public class Timing : MonoBehaviour
 
     public void StartTimerCoroutine()
     {
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            return;
+        }
+
         if (timerCoroutine != null)
         {
             StopCoroutine(timerCoroutine);

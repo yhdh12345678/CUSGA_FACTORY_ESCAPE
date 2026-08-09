@@ -273,8 +273,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u53F3\u4FA7\u8282\u70B9\u56FE"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f979eb6be14ead429d5a87a4d395bd5, type: 2}
-  m_sharedMaterial: {fileID: -1120416614473179194, guid: 8f979eb6be14ead429d5a87a4d395bd5, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
+  m_sharedMaterial: {fileID: 4357687372513342661, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -562,8 +562,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u5DE6\u4FA7\u8282\u70B9\u56FE"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 8f979eb6be14ead429d5a87a4d395bd5, type: 2}
-  m_sharedMaterial: {fileID: -1120416614473179194, guid: 8f979eb6be14ead429d5a87a4d395bd5, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
+  m_sharedMaterial: {fileID: 4357687372513342661, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -2624,7 +2624,7 @@ MonoBehaviour:
   AIname: "\u5BF9\u8BDD\u89D2\u82721"
   chatHistory: {fileID: 4900000, guid: 474ce4610ad967d4598338052b3cefcc, type: 3}
   use_history: 0
-  Apikey: lm-dXxiQGyE363suBUpwRUMMQ==
+  Apikey:
   robots: []
   anxiety_change_value: 0
   one_change_value: -5
@@ -2977,7 +2977,7 @@ GameObject:
   - component: {fileID: 2142775733}
   - component: {fileID: 2142775735}
   m_Layer: 5
-  m_Name: Pause
+  m_Name: SaveAndQuit
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3086,7 +3086,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 457837502}
         m_TargetAssemblyTypeName: UIManager, Assembly-CSharp
-        m_MethodName: OpenPauseMenu
+        m_MethodName: SaveAndQuit
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -3199,11 +3199,11 @@ PrefabInstance:
     - target: {fileID: 9184620300839283666, guid: c89d338d1c9c23540a31eac9b8126690, type: 3}
       propertyPath: m_fontAsset
       value: 
-      objectReference: {fileID: 11400000, guid: 8f979eb6be14ead429d5a87a4d395bd5, type: 2}
+      objectReference: {fileID: 11400000, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
     - target: {fileID: 9184620300839283666, guid: c89d338d1c9c23540a31eac9b8126690, type: 3}
       propertyPath: m_sharedMaterial
       value: 
-      objectReference: {fileID: -1120416614473179194, guid: 8f979eb6be14ead429d5a87a4d395bd5, type: 2}
+      objectReference: {fileID: 4357687372513342661, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
     - target: {fileID: 9184620300839283666, guid: c89d338d1c9c23540a31eac9b8126690, type: 3}
       propertyPath: m_fontColor32.rgba
       value: 4294111914

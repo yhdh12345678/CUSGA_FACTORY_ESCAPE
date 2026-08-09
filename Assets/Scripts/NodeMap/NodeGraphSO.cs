@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEditor;
 
 [CreateAssetMenu(fileName = "NodeGraph_",menuName = "ScriptableObjects/NodeGraph")]
 public class NodeGraphSO : ScriptableObject

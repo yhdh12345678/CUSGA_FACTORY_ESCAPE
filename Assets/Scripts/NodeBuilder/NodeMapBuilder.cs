@@ -67,6 +67,7 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
             
             if (currentNode.nodeType.isEntrance)
             {
+                UIManager.Instance.DisplayNodeText(currentNode.nodeTextForShow);
                 Camera.main.transform.position = currentNode.transform.position + new Vector3(0, 0, -10);
                 return;
             }
@@ -86,12 +87,31 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
         {
             NodeData currentNode = nodeProperties.Dequeue();
 
+            if (currentNode.nodeSO == null || currentNode.nodePrefab == null)
+            {
+                Debug.LogError("Skipped a node with incomplete data.");
+                continue;
+            }
+
+            if (nodeHasCreated.ContainsKey(currentNode.nodeSO.id))
+            {
+                Debug.LogError($"Skipped duplicate node ID: {currentNode.nodeSO.id}");
+                continue;
+            }
+
             Vector2 offset = HelperUtility.TranslateScreenToWorld(currentNode.nodeSO.rect.center);
             Vector2 spawnPosition = new Vector2(offset.x, -offset.y);
 
             GameObject nodeGameObject = Instantiate(currentNode.nodePrefab,spawnPosition,Quaternion.identity,transform);
 
             Node nodeComponent = nodeGameObject.GetComponent<Node>();
+
+            if (nodeComponent == null)
+            {
+                Debug.LogError($"Node prefab is missing the Node component: {currentNode.nodePrefab.name}");
+                Destroy(nodeGameObject);
+                continue;
+            }
 
             nodeComponent.InitializeNode(currentNode.nodeSO);
 
@@ -119,7 +139,7 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
         }
         else 
         {
-            Debug.Log("Fuck Every Player And Your Mother");
+            Debug.Log($"Root node {node.id} does not require a line.");
         }
     }
 
@@ -262,6 +282,15 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
     /// </summary>
     private void ProcessNodeInTempNodeQueue(NodeGraphSO nodeGraph, Queue<NodeSO> tempNodeQueue)
     {
+        HashSet<string> queuedNodeIds = new HashSet<string>();
+        foreach (NodeSO queuedNode in tempNodeQueue)
+        {
+            if (queuedNode != null)
+            {
+                queuedNodeIds.Add(queuedNode.id);
+            }
+        }
+
         // 加入整个节点树中的节点
         while (tempNodeQueue.Count > 0)
         {
@@ -269,14 +298,21 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
 
             foreach (NodeSO childNode in nodeGraph.GetChildNodes(currentNode))
             {
-                tempNodeQueue.Enqueue(childNode);
+                if (childNode == null)
+                {
+                    Debug.LogError($"Node {currentNode.id} references a missing child.");
+                }
+                else if (queuedNodeIds.Add(childNode.id))
+                {
+                    tempNodeQueue.Enqueue(childNode);
+                }
+                else
+                {
+                    Debug.LogError($"Skipped repeated or cyclic node reference: {childNode.id}");
+                }
             }
 
-            NodeTemplateSO nodeTemplate = GetNodeTemplate(currentNode.nodeType);
-
-            NodeData nodeData = CreateNodeFromNodeTemplate(currentNode,nodeTemplate);
-
-            nodeProperties.Enqueue(nodeData);
+            QueueNodeForCreation(currentNode);
         }
 
         // 加入独立的节点
@@ -284,17 +320,18 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
         {
             if (nodeSO.parentNodeIdList.Count == 0 && !nodeSO.nodeType.isEntrance)
             {
+                if (!queuedNodeIds.Add(nodeSO.id))
+                {
+                    continue;
+                }
+
                 if (nodeSO.childrenNodeIdList.Count > 0)
                 {
                     tempNodeQueue.Enqueue(nodeSO);
                 }
                 else
                 {
-                    NodeTemplateSO nodeTemplate = GetNodeTemplate(nodeSO.nodeType);
-
-                    NodeData nodeData = CreateNodeFromNodeTemplate(nodeSO,nodeTemplate);
-
-                    nodeProperties.Enqueue(nodeData);
+                    QueueNodeForCreation(nodeSO);
                 }
             }
         }
@@ -305,15 +342,34 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
 
             foreach (NodeSO childNode in nodeGraph.GetChildNodes(currentNode))
             {
-                tempNodeQueue.Enqueue(childNode);
+                if (childNode == null)
+                {
+                    Debug.LogError($"Node {currentNode.id} references a missing child.");
+                }
+                else if (queuedNodeIds.Add(childNode.id))
+                {
+                    tempNodeQueue.Enqueue(childNode);
+                }
+                else
+                {
+                    Debug.LogError($"Skipped repeated or cyclic node reference: {childNode.id}");
+                }
             }
 
-            NodeTemplateSO nodeTemplate = GetNodeTemplate(currentNode.nodeType);
-
-            NodeData nodeData = CreateNodeFromNodeTemplate(currentNode,nodeTemplate);
-
-            nodeProperties.Enqueue(nodeData);
+            QueueNodeForCreation(currentNode);
         }
+    }
+
+    private void QueueNodeForCreation(NodeSO nodeSO)
+    {
+        NodeTemplateSO nodeTemplate = GetNodeTemplate(nodeSO.nodeType);
+        if (nodeTemplate == null || nodeTemplate.nodePrefab == null)
+        {
+            Debug.LogError($"Skipped node {nodeSO.id} because its template is incomplete.");
+            return;
+        }
+
+        nodeProperties.Enqueue(CreateNodeFromNodeTemplate(nodeSO, nodeTemplate));
     }
 
     /// <summary>
@@ -426,7 +482,7 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
     /// <summary>
     /// 保存整个节点图，包含所有节点的节点状态
     /// </summary>
-    public void SaveNodeMap(List<string> nodeSaveIDList)
+    public void SaveNodeMap(List<string> nodeSaveIDList, string saveGeneration = null)
     {
         foreach (KeyValuePair<string,Node> keyValuePair in nodeHasCreated)
         {
@@ -441,9 +497,9 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
                 isActive = currentNode.gameObject.activeSelf
             };
 
-            SaveProfile<NodeState> saveProfile = new SaveProfile<NodeState>(nodeID,nodeState);
-            SaveManager.Delete(saveProfile.profileName);
-            SaveManager.Save(saveProfile);
+            string profileName = GetNodeProfileName(saveGeneration, nodeID);
+            SaveProfile<NodeState> saveProfile = new SaveProfile<NodeState>(profileName,nodeState);
+            SaveManager.SaveOrReplace(saveProfile);
 
             if (!nodeSaveIDList.Contains(nodeID))
                 nodeSaveIDList.Add(nodeID);
@@ -453,19 +509,31 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
     /// <summary>
     /// 加载整个节点图，包含所有节点的节点状态
     /// </summary>
-    public void LoadNodeMap(List<string> nodeSaveIDList)
+    public void LoadNodeMap(List<string> nodeSaveIDList, string saveGeneration = null)
     {
         LineCreator.Instance.DeleteAllLine();
 
         foreach (string nodeIDHasSave in nodeSaveIDList)
         {
-            NodeState nodeState = SaveManager.Load<NodeState>(nodeIDHasSave).saveData;// 找到该节点ID的状态信息
+            string profileName = GetNodeProfileName(saveGeneration, nodeIDHasSave);
+            if (!SaveManager.TryLoad(profileName, out SaveProfile<NodeState> saveProfile))
+            {
+                Debug.LogError($"Node save is missing or damaged: {nodeIDHasSave}");
+                continue;
+            }
+
+            NodeState nodeState = saveProfile.saveData;// 找到该节点ID的状态信息
             Node currentNode = GetNode(nodeIDHasSave);// 在当前节点图中找到该节点实例
+            if (currentNode == null)
+            {
+                Debug.LogError($"Saved node does not exist in the current graph: {nodeIDHasSave}");
+                continue;
+            }
 
             // 载入节点状态
             currentNode.transform.localPosition = nodeState.localPosition;
             currentNode.gameObject.SetActive(nodeState.isActive);
-            currentNode.childIdList = nodeState.childNodeID;
+            currentNode.childIdList = nodeState.childNodeID ?? new List<string>();
             currentNode.parentID = nodeState.parentNodeID;
             currentNode.hasPopUp = nodeState.hasPopUp;
             
@@ -496,6 +564,13 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
         {
             SaveManager.Delete(nodeIDHasSave);
         }
+    }
+
+    private static string GetNodeProfileName(string saveGeneration, string nodeID)
+    {
+        return string.IsNullOrWhiteSpace(saveGeneration)
+            ? nodeID
+            : $"{saveGeneration}_{nodeID}";
     }
 
 }

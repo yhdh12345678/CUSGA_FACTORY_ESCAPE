@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [DisallowMultipleComponent]
-public class Controllable : MonoBehaviour
+public class Controllable : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("可调整参数")]
     public float maxSpeed = 15f; // 最高速度限制
@@ -98,15 +98,15 @@ public class Controllable : MonoBehaviour
     // 限制速度
     void LimitVelocity()
     {
-        Vector2 velocity = BeControlledRb.velocity;
+        Vector2 velocity = BeControlledRb.linearVelocity;
         if (velocity.magnitude > maxSpeed)
         {
-            BeControlledRb.velocity = velocity.normalized * maxSpeed;
+            BeControlledRb.linearVelocity = velocity.normalized * maxSpeed;
         }
 
         if (velocity.magnitude > 0)
         {
-            BeControlledRb.velocity -= velocity.normalized * Time.deltaTime * Friction;
+            BeControlledRb.linearVelocity -= velocity.normalized * Time.deltaTime * Friction;
         }
     }
 
@@ -127,5 +127,18 @@ public class Controllable : MonoBehaviour
         {
             Debug.Log("目标节点不存在");
         }
+    }
+
+    public bool ActivateAccessibility()
+    {
+        Node targetNode = NodeMapBuilder.Instance.GetNode(targetNodeID);
+        if (targetNode == null || targetNode.hasPopUp)
+        {
+            return targetNode != null;
+        }
+
+        StartCoroutine(targetNode.PopUpChildNodes(targetNode.nodeInfos));
+        targetNode.hasPopUp = true;
+        return true;
     }
 }

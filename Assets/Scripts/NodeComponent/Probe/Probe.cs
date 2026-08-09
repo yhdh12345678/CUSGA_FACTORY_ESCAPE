@@ -1,7 +1,7 @@
 using System.Collections;
 using UnityEngine;
 
-public class Probe : MonoBehaviour
+public class Probe : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("观测参数")]
     private string targetNodeID;
@@ -19,6 +19,7 @@ public class Probe : MonoBehaviour
     public float interactiveDistance = 3f; // 交互距离
 
     private bool isBlinking = false;
+    private Coroutine blinkCoroutine;
 
     private void Start() {
         myNode = transform.GetComponent<Node>();
@@ -52,8 +53,12 @@ public class Probe : MonoBehaviour
             }
             else if (distance < interactiveDistance)
             {
-                StopBlink();
+                StopBlink(true);
                 target.gameObject.SetActive(true);
+            }
+            else
+            {
+                StopBlink(false);
             }
         }
     }
@@ -92,18 +97,29 @@ public class Probe : MonoBehaviour
     {
         if (!isBlinking)
         {
-            StartCoroutine(BlinkRoutine());
+            blinkCoroutine = StartCoroutine(BlinkRoutine());
         }
     }
 
     // 停止闪烁
-    void StopBlink()
+    void StopBlink(bool targetReached)
     {
-        if (isBlinking)
+        if (blinkCoroutine != null)
         {
-            StopCoroutine(BlinkRoutine());
-            indicatorLight.color = targetColor;
+            StopCoroutine(blinkCoroutine);
+            blinkCoroutine = null;
         }
+
+        isBlinking = false;
+        if (indicatorLight != null)
+        {
+            indicatorLight.color = targetReached ? targetColor : originalColor;
+        }
+    }
+
+    private void OnDisable()
+    {
+        StopBlink(false);
     }
 
     IEnumerator BlinkRoutine()
@@ -117,5 +133,19 @@ public class Probe : MonoBehaviour
             indicatorLight.color = originalColor;
             yield return new WaitForSeconds(blinkSpeed);
         }
+    }
+
+    public bool ActivateAccessibility()
+    {
+        Node targetNode = NodeMapBuilder.Instance.GetNode(targetNodeID);
+        if (targetNode == null)
+        {
+            return false;
+        }
+
+        targetNode.gameObject.SetActive(true);
+        target = targetNode.transform;
+        StopBlink(true);
+        return true;
     }
 }

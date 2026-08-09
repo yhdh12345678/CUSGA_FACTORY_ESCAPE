@@ -69,12 +69,22 @@ public class MenuNode : MonoBehaviour
         {
             Node currentNode = childNode.node; // Instantiate(childNode.node,transform.position,Quaternion.identity);
 
-            currentNode.transform.position = transform.position;
-            currentNode.transform.localScale = Vector3.one * 0.3f; 
+            currentNode.transform.position = FactoryEscapeAccessibility.ReduceMotion
+                ? transform.position + (Vector3)(childNode.direction * GameManager.Instance.popUpForce)
+                : transform.position;
+            currentNode.transform.localScale = FactoryEscapeAccessibility.ReduceMotion
+                ? Vector3.one
+                : Vector3.one * 0.3f;
             currentNode.gameObject.SetActive(true);
 
             GameMenu.Instance.CreateLine(currentNode);
             soundManager.Instance.PlaySFX("NodeBorn");
+
+            if (FactoryEscapeAccessibility.ReduceMotion)
+            {
+                currentNode.isPopping = false;
+                continue;
+            }
 
             Sequence sequence = DOTween.Sequence();
             sequence.Append(currentNode.transform.DOMove(

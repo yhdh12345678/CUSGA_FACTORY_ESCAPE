@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class ControlToResult : MonoBehaviour
+public class ControlToResult : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("可调整参数")]
     public float maxSpeed = 15f; // 最高速度限制
@@ -109,15 +109,23 @@ public class ControlToResult : MonoBehaviour
 
     void LimitVelocity()
     {
-        Vector2 velocity = BeControlledRb.velocity;
+        Vector2 velocity = BeControlledRb.linearVelocity;
         if (velocity.magnitude > maxSpeed)
         {
-            BeControlledRb.velocity = velocity.normalized * maxSpeed;
+            BeControlledRb.linearVelocity = velocity.normalized * maxSpeed;
         }
 
         if (velocity.magnitude > 0)
         {
-            BeControlledRb.velocity -= velocity.normalized * Time.deltaTime * Friction;
+            BeControlledRb.linearVelocity -= velocity.normalized * Time.deltaTime * Friction;
         }
+    }
+
+    public bool ActivateAccessibility()
+    {
+        StaticEventHandler.CallGetResult(GameManager.Instance.fakeCutScene);
+        GameManager.Instance.levelIndex = -1;
+        GameManager.Instance.gameState = GameState.Result;
+        return true;
     }
 }

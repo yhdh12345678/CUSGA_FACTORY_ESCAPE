@@ -50,12 +50,14 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
 
     private void Update()
     {
-        if (VideoManager.Instance.isPlayingCutScene) return;
+        VideoManager videoManager = VideoManager.Instance;
+        UIManager uiManager = UIManager.Instance;
+        if (videoManager == null || uiManager == null || videoManager.isPlayingCutScene) return;
 
         if (!dialogPanel.activeSelf && textIndex < textList.Count)
         {
             dialogPanel.SetActive(true);
-            UIManager.Instance.UIShow = true;
+            uiManager.UIShow = true;
             PopUpDialogPanel();
             SetInitialValue();
         }
@@ -105,23 +107,84 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
     {
         if (Input.GetMouseButtonUp(0))
         {
-            if (textFinished && textIndex < textList.Count)
-            {
-                LoadImageForCharacter();
+            AdvanceForAccessibility();
+        }
+    }
 
-                nameText.text = nameList[textIndex];
-                StartCoroutine(PlayingRowText(textList[textIndex]));
-            }
-            else if (!textFinished && !cancelTyping)
+    public bool AdvanceForAccessibility()
+    {
+        if (!dialogPanel.activeSelf)
+        {
+            return false;
+        }
+
+        if (textFinished && textIndex < textList.Count)
+        {
+            LoadImageForCharacter();
+            nameText.text = nameList[textIndex];
+            StartCoroutine(PlayingRowText(textList[textIndex]));
+        }
+        else if (!textFinished && !cancelTyping)
+        {
+            cancelTyping = true;
+        }
+        else if (textFinished && textIndex >= textList.Count)
+        {
+            dialogPanel.SetActive(false);
+            UIManager.Instance.UIShow = false;
+        }
+
+        return true;
+    }
+
+    public string GetAccessibilityVisualDescription()
+    {
+        var speakers = new List<string>();
+        foreach (string speaker in nameList)
+        {
+            string name = speaker?.Trim();
+            if (!string.IsNullOrWhiteSpace(name) && !speakers.Contains(name))
             {
-                cancelTyping = true;
-            }
-            else if (textFinished && textIndex >= textList.Count)
-            {
-                dialogPanel.SetActive(false);
-                UIManager.Instance.UIShow = false;
+                speakers.Add(name);
             }
         }
+
+        return speakers.Count == 0
+            ? "人物对话画面，左右两侧显示参与对话的角色立绘。"
+            : $"人物对话画面，{string.Join("、", speakers)}参与交谈，当前说话者的立绘高亮。";
+    }
+
+    public List<string> GetAccessibilityTextLines()
+    {
+        var lines = new List<string>();
+        for (int index = 0; index < textList.Count; index++)
+        {
+            string speaker = index < nameList.Count ? nameList[index]?.Trim() : string.Empty;
+            string text = textList[index]?.Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            lines.Add(string.IsNullOrWhiteSpace(speaker) ? text : $"{speaker}：{text}");
+        }
+
+        return lines;
+    }
+
+    public bool AdvancePageForAccessibility()
+    {
+        if (!dialogPanel.activeSelf)
+        {
+            return false;
+        }
+
+        textIndex = textList.Count;
+        textFinished = true;
+        cancelTyping = false;
+        dialogPanel.SetActive(false);
+        UIManager.Instance.UIShow = false;
+        return true;
     }
 
     /// <summary>
@@ -184,6 +247,15 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
     /// </summary>
     IEnumerator PlayingRowText(string textToPlay)
     {
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            dialogText.text = textToPlay;
+            cancelTyping = false;
+            textFinished = true;
+            textIndex++;
+            yield break;
+        }
+
         textFinished = false;
         dialogText.text = Setting.stringDefaultValue;
         int index = 0;
@@ -212,6 +284,11 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
         var rows = textFile.text.Split('\n');
         foreach (var row in rows)
         {
+            if (string.IsNullOrWhiteSpace(row))
+            {
+                continue;
+            }
+
             string[] row_list = row.Split(':');
             character1List.Add(row_list[0]);
             character2List.Add(row_list[1]);
@@ -247,6 +324,17 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
     {
         textFinished = false;
         AIDialogText.text = Setting.stringDefaultValue;
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            AIDialogText.text = textToPlay;
+            cancelTyping = false;
+            textFinished = true;
+            textIndex++;
+            AddAIDialogLogCell(AINameText.text, textToPlay);
+            FactoryEscapeAccessibility.RefreshScreen("ai-dialog");
+            yield break;
+        }
+
         int index = 0;
         while (!cancelTyping && index < textToPlay.Length-1)
         {
@@ -263,16 +351,18 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
 
         textIndex++;
 
-        AddAIDialogLogCell(textToPlay);
+        AddAIDialogLogCell(AINameText.text, textToPlay);
+        FactoryEscapeAccessibility.RefreshScreen("ai-dialog");
     }
 
     /// <summary>
     /// 添加对话历史记录
     /// </summary>
-    public void AddAIDialogLogCell(string dialogText)
+    public void AddAIDialogLogCell(string speaker, string dialogText)
     {
         GameObject dialogCell = Instantiate(dialogCellPrefab,content);
-        dialogCell.GetComponentInChildren<TMP_Text>().text = dialogText;
+        dialogCell.GetComponentInChildren<TMP_Text>().text =
+            string.IsNullOrWhiteSpace(speaker) ? dialogText : $"{speaker}：{dialogText}";
     }
 
     //从ai处获取文本
@@ -307,6 +397,12 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
     {
         soundManager.Instance.PlaySFX("NodeBorn");
 
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            dialogPanel.transform.localScale = Vector3.one;
+            return;
+        }
+
         dialogPanel.transform.localScale = Vector3.one * 0.3f;
         Sequence sequence = DOTween.Sequence();
         sequence.Append(dialogPanel.transform.DOScale(new Vector3(1f,0.3f,1),0.1f));
@@ -316,6 +412,12 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
     public void PopUpAIDialogPanel()
     {
         soundManager.Instance.PlaySFX("NodeBorn");
+
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            AIDialogPanel.transform.localScale = Vector3.one;
+            return;
+        }
 
         AIDialogPanel.transform.localScale = Vector3.one * 0.3f;
         Sequence sequence = DOTween.Sequence();

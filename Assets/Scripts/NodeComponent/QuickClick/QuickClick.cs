@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
 
-public class QuickClick : MonoBehaviour
+public class QuickClick : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("观测数据")]
     private Node myNode;
@@ -65,6 +65,19 @@ public class QuickClick : MonoBehaviour
             myNode.isDragging = false;
             GameManager.Instance.haveNodeDrag = false;
         } 
+    }
+
+    public bool ActivateAccessibility()
+    {
+        if (myNode == null || myNode.hasPopUp)
+        {
+            return myNode != null;
+        }
+
+        ClickNumber = 0;
+        StartCoroutine(myNode.PopUpChildNodes(myNode.nodeInfos));
+        myNode.hasPopUp = true;
+        return true;
     }
 
 }

@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e481d945d35fc254c9177ac56213f913, type: 3}
   m_Name: ControlNode
   m_EditorClassIdentifier: 
-  nodeText: "\u9676\u7279"
+  nodeText: "\u5C0F\u660E"
   id: b006eeb9-e3b2-414d-9231-9b3ddedc9342
   parentNodeIdList:
   - d0ebdca6-06e6-4da0-a17c-f4fcd9cee19d

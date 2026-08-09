@@ -17,17 +17,23 @@ public class TimeManager : SingletonMonobehaviour<TimeManager>
     public bool startTimer = false; 
 
     private void Update() {
+        NodeMapBuilder nodeMapBuilder = NodeMapBuilder.Instance;
+        if (nodeMapBuilder == null)
+        {
+            return;
+        }
+
         if (startTimingNode == null && startTimingNodeId != null)
         {
-            startTimingNode = NodeMapBuilder.Instance.GetNode(startTimingNodeId);
+            startTimingNode = nodeMapBuilder.GetNode(startTimingNodeId);
         }
 
         if (endTimingNode == null && endTimingNodeId != null)
         {
-            endTimingNode = NodeMapBuilder.Instance.GetNode(endTimingNodeId);
+            endTimingNode = nodeMapBuilder.GetNode(endTimingNodeId);
         }
 
-        if (startTimer && timingNode.gameObject.activeSelf)
+        if (startTimer && timingNode != null && timingNode.gameObject.activeSelf)
         {
             if (timingNode.nodeType.isTiming)
             {

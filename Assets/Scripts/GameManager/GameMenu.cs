@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Accessibility;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using DG.Tweening;
@@ -11,6 +12,7 @@ public class GameMenu : SingletonMonobehaviour<GameMenu>
     public List<Node> startNodes = new List<Node>();
     public GameObject LinePrefab;
     public Dictionary<Node,Line> nodeLineBinding = new Dictionary<Node,Line>();
+    public bool AwaitingNewGameConfirmation { get; private set; }
 
     public void ClearAllSelectedNode(Node node)
     {
@@ -59,9 +61,65 @@ public class GameMenu : SingletonMonobehaviour<GameMenu>
     }
 
     public void StartGame()
-    {   
-        GameManager.Instance.levelIndex = 0;
+    {
+        if (GameManager.Instance.IsSceneTransitionInProgress)
+        {
+            return;
+        }
+
+        if (GameManager.Instance.HasSavedGame)
+        {
+            if (!AwaitingNewGameConfirmation)
+            {
+                AwaitingNewGameConfirmation = true;
+                AssistiveSupport.notificationDispatcher.SendAnnouncement(
+                    "已有存档。再次选择开始游戏将删除原存档");
+                return;
+            }
+        }
+
+        ConfirmStartGame();
+    }
+
+    public bool RequestStartGameForAccessibility()
+    {
+        if (GameManager.Instance.IsSceneTransitionInProgress)
+        {
+            return false;
+        }
+
+        if (GameManager.Instance.HasSavedGame)
+        {
+            if (!AwaitingNewGameConfirmation)
+            {
+                AwaitingNewGameConfirmation = true;
+                AssistiveSupport.notificationDispatcher.SendAnnouncement(
+                    "已有存档。请选择确认重新开始或保留存档");
+            }
+
+            return true;
+        }
+
+        return ConfirmStartGame();
+    }
+
+    public bool ConfirmStartGame()
+    {
+        if (GameManager.Instance.IsSceneTransitionInProgress)
+        {
+            return false;
+        }
+
+        AwaitingNewGameConfirmation = false;
+        GameManager.Instance.StartNewGame();
         GameManager.Instance.StartChangeSceneCoroutine("MainMenu","GameScene",GameState.Generating);
+        return true;
+    }
+
+    public bool CancelStartGame()
+    {
+        AwaitingNewGameConfirmation = false;
+        return true;
     }
 
     public void QuitGame()
@@ -71,13 +129,30 @@ public class GameMenu : SingletonMonobehaviour<GameMenu>
 
     public void ContinueFromMain(Node targetNode)
     {
-        if (GameManager.Instance.levelIndex == -1)
+        TryContinueFromMain(targetNode);
+    }
+
+    public bool TryContinueFromMain(Node targetNode)
+    {
+        AwaitingNewGameConfirmation = false;
+        if (GameManager.Instance.IsSceneTransitionInProgress)
         {
-            Debug.Log("无游戏存档");
-            NoGameArchive(targetNode);
-            return;
+            return false;
         }
+
+        if (!GameManager.Instance.TryLoadSavedGame(out string errorMessage))
+        {
+            Debug.Log(errorMessage);
+            AssistiveSupport.notificationDispatcher.SendAnnouncement(errorMessage);
+            if (targetNode != null)
+            {
+                NoGameArchive(targetNode);
+            }
+            return false;
+        }
+
         GameManager.Instance.ChangeAndLoadGameScene("MainMenu");
+        return true;
     }
 
     public void ContinueByLoad()
@@ -114,12 +189,22 @@ public class GameMenu : SingletonMonobehaviour<GameMenu>
     {   
         Node parentNode = startNodes.Find(x => x.id == currentNode.parentID);
 
-        currentNode.transform.position = parentNode.transform.position;
-        currentNode.transform.localScale = Vector3.one * 0.3f; 
+        currentNode.transform.position = FactoryEscapeAccessibility.ReduceMotion
+            ? parentNode.transform.position + (Vector3)(new Vector2(-0.4f,0.4f) * GameManager.Instance.popUpForce)
+            : parentNode.transform.position;
+        currentNode.transform.localScale = FactoryEscapeAccessibility.ReduceMotion
+            ? Vector3.one
+            : Vector3.one * 0.3f;
         currentNode.gameObject.SetActive(true);
 
         Instance.CreateLine(currentNode);
         soundManager.Instance.PlaySFX("NodeBorn");
+
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            currentNode.isPopping = false;
+            return;
+        }
 
         Sequence sequence = DOTween.Sequence();
         sequence.Append(currentNode.transform.DOMove(

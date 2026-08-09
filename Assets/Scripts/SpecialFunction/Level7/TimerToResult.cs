@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 
-public class TimerToResult : MonoBehaviour
+public class TimerToResult : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("观测参数")]
     public Node startNode;
@@ -65,6 +65,11 @@ public class TimerToResult : MonoBehaviour
 
     public void StartTimerCoroutine()
     {
+        if (FactoryEscapeAccessibility.ReduceMotion)
+        {
+            return;
+        }
+
         if (timerCoroutine != null)
         {
             StopCoroutine(timerCoroutine);
@@ -90,7 +95,23 @@ public class TimerToResult : MonoBehaviour
         }
 
         Debug.Log("时间到！");
-        // 在此处执行计时结束后的操作
+        CompleteResult();
+    }
+
+    public bool ActivateAccessibility()
+    {
+        if (timerCoroutine != null)
+        {
+            StopCoroutine(timerCoroutine);
+            timerCoroutine = null;
+        }
+
+        CompleteResult();
+        return true;
+    }
+
+    private static void CompleteResult()
+    {
         StaticEventHandler.CallGetResult(GameManager.Instance.winCutScene);
         GameManager.Instance.levelIndex = -1;
         GameManager.Instance.gameState = GameState.Result;

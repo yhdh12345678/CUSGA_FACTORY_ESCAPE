@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-public class QTE : MonoBehaviour
+public class QTE : MonoBehaviour, IAccessibleNodeAction
 {
     [Header("观测数据")]
     public Node myNode;
@@ -11,6 +11,15 @@ public class QTE : MonoBehaviour
     private Vector2 dragStartPosition;
     private Direction direction;
     private SpriteRenderer spriteRenderer;
+
+    public string AccessibilityLabel => direction switch
+    {
+        Direction.Left => "向左移动",
+        Direction.Right => "向右移动",
+        Direction.Up => "向上移动",
+        Direction.Down => "向下移动",
+        _ => "移动"
+    };
 
     private void Start() {
         switch (direction)
@@ -142,6 +151,18 @@ public class QTE : MonoBehaviour
             }
         }
         return currentDirection;
+    }
+
+    public bool ActivateAccessibility()
+    {
+        if (myNode == null || myNode.hasPopUp)
+        {
+            return myNode != null;
+        }
+
+        StartCoroutine(myNode.PopUpChildNodes(myNode.nodeInfos));
+        myNode.hasPopUp = true;
+        return true;
     }
 
 }

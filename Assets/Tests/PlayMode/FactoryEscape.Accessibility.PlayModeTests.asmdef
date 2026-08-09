@@ -1,0 +1,6 @@
+{
+  "name": "FactoryEscape.Accessibility.PlayModeTests",
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

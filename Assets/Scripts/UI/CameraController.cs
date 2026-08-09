@@ -8,10 +8,14 @@ public class CameraController : MonoBehaviour
     
     private void Update()
     {
-        if (GameManager.Instance.haveNodeDrag || UIManager.Instance.UIShow) return;
+        GameManager gameManager = GameManager.Instance;
+        UIManager uiManager = UIManager.Instance;
+        Camera activeCamera = Camera.main;
+        if (gameManager == null || uiManager == null || activeCamera == null ||
+            gameManager.haveNodeDrag || uiManager.UIShow) return;
             
         // 获取鼠标位置
-        Vector2 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        Vector2 mousePosition = activeCamera.ScreenToWorldPoint(Input.mousePosition);
 
         // 发射一条射线从摄像机到鼠标位置
         RaycastHit2D hit = Physics2D.Raycast(mousePosition, Vector2.zero);
@@ -31,7 +35,7 @@ public class CameraController : MonoBehaviour
                 // 计算鼠标移动的距离
                 Vector2 delta = lastMousePos - mousePosition;
                 // 将摄像机移动与鼠标移动相反的方向
-                Camera.main.transform.Translate(delta);
+                activeCamera.transform.Translate(delta);
             }
         }
     }

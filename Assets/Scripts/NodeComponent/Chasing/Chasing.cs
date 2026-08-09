@@ -38,6 +38,8 @@ public class Chasing : MonoBehaviour
     }
 
     private void Update() {
+        if (FactoryEscapeAccessibility.ReduceMotion) return;
+
         if (chasingTargetNode == null || myNode.isPopping) return;
 
         Vector2 direction = (chasingTargetNode.transform.position - myNode.transform.position).normalized;

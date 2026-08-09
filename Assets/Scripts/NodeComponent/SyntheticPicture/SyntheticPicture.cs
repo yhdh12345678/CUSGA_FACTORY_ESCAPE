@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class SyntheticPicture : MonoBehaviour
+public class SyntheticPicture : MonoBehaviour, IAccessibleNodeAction
 {
     public Node targetNode;
     private string targetId;
@@ -81,5 +81,18 @@ public class SyntheticPicture : MonoBehaviour
         LineCreator.Instance.DeleteLine(targetNode);
 
         StartCoroutine(myNode.PopUpChildNodes(myNode.nodeInfos));
+    }
+
+    public bool ActivateAccessibility()
+    {
+        targetNode ??= NodeMapBuilder.Instance.GetNode(targetId);
+        if (targetNode == null || hasSynthesized)
+        {
+            return targetNode != null;
+        }
+
+        MergeTowNode();
+        hasSynthesized = true;
+        return true;
     }
 }

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
-public class Level1AILock : MonoBehaviour
+public class Level1AILock : MonoBehaviour, IAccessibleNodeAction
 {
     private Node myNode;
     [SerializeField] private int submissionTimes;
@@ -53,9 +53,7 @@ public class Level1AILock : MonoBehaviour
                 // 节点交互内容
                 if(!hasResult)
                 {
-                    tongyi_AI.instance.input_field.SetActive(true);
-                    DialogSystem.Instance.anxietyValue.localScale = new Vector3(GameManager.Instance.currentAnxiety/GameManager.Instance.maxAnxiety, 1, 1);
-                    DialogSystem.Instance.value.text = (GameManager.Instance.currentAnxiety/GameManager.Instance.maxAnxiety * 100).ToString("F0") + "%";
+                    OpenAIDialog();
                 }
                 
             }
@@ -80,6 +78,7 @@ public class Level1AILock : MonoBehaviour
     {
         GameManager.Instance.currentAnxiety += args.anxiety_change_value;
         submissionTimes--;
+        tongyi_AI.instance.SubmitTimer--;
 
         DialogSystem.Instance.anxietyValue.localScale = new Vector3(GameManager.Instance.currentAnxiety/GameManager.Instance.maxAnxiety, 1, 1);
         DialogSystem.Instance.value.text = (GameManager.Instance.currentAnxiety/GameManager.Instance.maxAnxiety * 100).ToString("F0") + "%";
@@ -87,20 +86,21 @@ public class Level1AILock : MonoBehaviour
         if (submissionTimes == 0)
         {
             hasResult = true;
+            tongyi_AI.instance.send_button.interactable = false;
         }
+
+        FactoryEscapeAccessibility.UpdateAIStatus(submissionTimes == 0);
     }
 
     private void Update() {
         if (hasResult && DialogSystem.Instance.textFinished && Input.GetMouseButtonDown(0) && DialogSystem.Instance.AIDialogPanel.gameObject.activeSelf)
         {
-            DialogSystem.Instance.AIDialogPanel.gameObject.SetActive(false);
-            UIManager.Instance.UIShow = false;
+            CompleteAccessibilityResult();
         }
 
         if (hasResult && !DialogSystem.Instance.AIDialogPanel.gameObject.activeSelf && !getCutScene)
         {
-            CheckAnxietyValue();
-            getCutScene = true;
+            CompleteAccessibilityResult();
         }
     }
 
@@ -113,7 +113,7 @@ public class Level1AILock : MonoBehaviour
         {
             if (GameManager.Instance.CheckAnxietyValue())
             {
-                Debug.Log("out of area");
+                AdvanceToNextLevel();
             }
             else
             {
@@ -129,13 +129,64 @@ public class Level1AILock : MonoBehaviour
         {
             if (GameManager.Instance.CheckAnxietyValue())
             {
-                GameManager.Instance.levelIndex++;
-                GameManager.Instance.gameState = GameState.Generating;
+                AdvanceToNextLevel();
             }
             else
             {
                 VideoManager.Instance.ShowCutScenes(secondFailResult);
             }
         }
+    }
+
+    public bool ActivateAccessibility()
+    {
+        if (myNode == null || hasResult)
+        {
+            return AccessibilityResultReady && CompleteAccessibilityResult();
+        }
+
+        OpenAIDialog();
+        return true;
+    }
+
+    public bool AccessibilityResultReady => hasResult && DialogSystem.Instance != null &&
+                                            DialogSystem.Instance.textFinished;
+
+    public bool CompleteAccessibilityResult()
+    {
+        if (!AccessibilityResultReady)
+        {
+            return false;
+        }
+
+        DialogSystem.Instance.AIDialogPanel.gameObject.SetActive(false);
+        UIManager.Instance.UIShow = false;
+        if (!getCutScene)
+        {
+            CheckAnxietyValue();
+            getCutScene = true;
+        }
+
+        return true;
+    }
+
+    private void OpenAIDialog()
+    {
+        tongyi_AI.instance.SubmitTimer = submissionTimes;
+        tongyi_AI.instance.send_button.interactable = true;
+        tongyi_AI.instance.input_field.SetActive(true);
+        UIManager.Instance.UIShow = true;
+        DialogSystem.Instance.AIDialogPanel.gameObject.SetActive(true);
+        DialogSystem.Instance.anxietyValue.localScale = new Vector3(
+            GameManager.Instance.currentAnxiety / GameManager.Instance.maxAnxiety, 1, 1);
+        DialogSystem.Instance.value.text =
+            (GameManager.Instance.currentAnxiety / GameManager.Instance.maxAnxiety * 100).ToString("F0") + "%";
+        FactoryEscapeAccessibility.RefreshScreen();
+    }
+
+    private static void AdvanceToNextLevel()
+    {
+        GameManager.Instance.levelIndex++;
+        GameManager.Instance.gameState = GameState.Generating;
     }
 }
