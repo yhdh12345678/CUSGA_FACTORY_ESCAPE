@@ -463,15 +463,15 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u8FD9\u91CC\u662F\u6587\u672C\u8282\u70B9\u5185\u5BB9\n\u8FD9\u91CC\u662F\u6587\u672C\u8282\u70B9\u5185\u5BB9\n\u8FD9\u91CC\u662F\u6587\u672C\u8282\u70B9\u5185\u5BB9\n\u8FD9\u91CC\u662F\u6587\u672C\u8282\u70B9\u5185\u5BB9"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
-  m_sharedMaterial: {fileID: 4357687372513342661, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 24145583281976841bc5d51923c3c58a, type: 2}
+  m_sharedMaterial: {fileID: 2179534826905807720, guid: 24145583281976841bc5d51923c3c58a, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
     rgba: 4294111914
-  m_fontColor: {r: 0.6666667, g: 0.9490196, b: 0.9490196, a: 1}
+  m_fontColor: {r: 0.9490196, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -499,20 +499,23 @@ MonoBehaviour:
   m_VerticalAlignment: 256
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
   m_paragraphSpacing: 0
   m_charWidthMaxAdj: 0
-  m_enableWordWrapping: 1
+  m_TextWrappingMode: 1
   m_wordWrappingRatios: 0.4
   m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
   parentLinkedComponent: {fileID: 0}
   m_enableKerning: 1
+  m_ActiveFontFeatures: 6e72656b
   m_enableExtraPadding: 0
   checkPaddingRequired: 0
   m_isRichText: 1
+  m_EmojiFallbackSupport: 1
   m_parseCtrlCharacters: 1
   m_isOrthographic: 1
   m_isCullingEnabled: 0
@@ -1010,15 +1013,15 @@ MonoBehaviour:
       m_Calls: []
   m_text: "-   \u9605   \u8BFB   \u6A21   \u5F0F   -"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
-  m_sharedMaterial: {fileID: 4357687372513342661, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 24145583281976841bc5d51923c3c58a, type: 2}
+  m_sharedMaterial: {fileID: 2179534826905807720, guid: 24145583281976841bc5d51923c3c58a, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
     rgba: 4291611770
-  m_fontColor: {r: 0.4784314, g: 0.8000001, b: 0.8000001, a: 1}
+  m_fontColor: {r: 0.9490196, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -1035,8 +1038,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 14
-  m_fontSizeBase: 14
+  m_fontSize: 32
+  m_fontSizeBase: 32
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -1046,20 +1049,23 @@ MonoBehaviour:
   m_VerticalAlignment: 256
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
   m_paragraphSpacing: 0
   m_charWidthMaxAdj: 0
-  m_enableWordWrapping: 1
+  m_TextWrappingMode: 1
   m_wordWrappingRatios: 0.4
   m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
   parentLinkedComponent: {fileID: 0}
   m_enableKerning: 1
+  m_ActiveFontFeatures: 6e72656b
   m_enableExtraPadding: 0
   checkPaddingRequired: 0
   m_isRichText: 1
+  m_EmojiFallbackSupport: 1
   m_parseCtrlCharacters: 1
   m_isOrthographic: 1
   m_isCullingEnabled: 0
@@ -1180,15 +1186,15 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u6587  \u672C  \u6D4F  \u89C8"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
-  m_sharedMaterial: {fileID: 4357687372513342661, guid: fca67701ba9a2794999ccd875ebb6d3d, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 24145583281976841bc5d51923c3c58a, type: 2}
+  m_sharedMaterial: {fileID: 2179534826905807720, guid: 24145583281976841bc5d51923c3c58a, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
     rgba: 4291611770
-  m_fontColor: {r: 0.4784314, g: 0.8000001, b: 0.8000001, a: 1}
+  m_fontColor: {r: 0.9490196, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -1216,20 +1222,23 @@ MonoBehaviour:
   m_VerticalAlignment: 256
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
   m_paragraphSpacing: 0
   m_charWidthMaxAdj: 0
-  m_enableWordWrapping: 1
+  m_TextWrappingMode: 1
   m_wordWrappingRatios: 0.4
   m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
   parentLinkedComponent: {fileID: 0}
   m_enableKerning: 1
+  m_ActiveFontFeatures: 6e72656b
   m_enableExtraPadding: 0
   checkPaddingRequired: 0
   m_isRichText: 1
+  m_EmojiFallbackSupport: 1
   m_parseCtrlCharacters: 1
   m_isOrthographic: 1
   m_isCullingEnabled: 0

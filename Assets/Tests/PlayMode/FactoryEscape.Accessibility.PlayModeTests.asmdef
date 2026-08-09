@@ -1,5 +1,8 @@
 {
   "name": "FactoryEscape.Accessibility.PlayModeTests",
+  "references": [
+    "Unity.TextMeshPro"
+  ],
   "optionalUnityReferences": [
     "TestAssemblies"
   ]

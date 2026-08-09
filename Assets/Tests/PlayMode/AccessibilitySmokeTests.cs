@@ -9,11 +9,105 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Accessibility;
 using UnityEngine.SceneManagement;
+using UnityEngine.TextCore.LowLevel;
 using UnityEngine.UI;
 using UnityEngine.TestTools;
+using TMPro;
 
 public sealed class AccessibilitySmokeTests
 {
+    [Test]
+    public void ReadableChineseFontKeepsQualityContrastAndGb2312Fallback()
+    {
+        TMP_FontAsset font = Resources.Load<TMP_FontAsset>(
+            "Front/ChineseSubset/FactoryEscapeChineseReadable SDF");
+        Assert.That(font, Is.Not.Null, "必须打入高清中文主字体。");
+        Assert.That(font.faceInfo.pointSize, Is.GreaterThanOrEqualTo(90));
+        Assert.That(font.atlasPadding, Is.GreaterThanOrEqualTo(9));
+        Assert.That(font.atlasRenderMode, Is.EqualTo(GlyphRenderMode.SDF32));
+        Assert.That(font.material.shader.name, Is.EqualTo("TextMeshPro/Mobile/Distance Field"),
+            "Android 中文字体必须使用已在真机验证可绘制完整字形的移动端 SDF 材质。");
+        Assert.That(
+            font.material.GetFloat(ShaderUtilities.ID_OutlineWidth),
+            Is.GreaterThanOrEqualTo(0.1f),
+            "浅色正文必须有稳定的深色描边以保证复杂背景上的局部对比度。");
+
+        string requiredCharacters = File.ReadAllText(Path.Combine(
+            Application.dataPath,
+            "Editor",
+            "FontOptimization",
+            "FactoryEscapeRequiredCharacterSet.txt"));
+        Assert.That(font.HasCharacters(requiredCharacters, out List<char> missing), Is.True,
+            $"高清主字体缺少 {missing?.Count ?? 0} 个项目字符。");
+        Assert.That(font.fallbackFontAssetTable, Has.Count.EqualTo(1));
+        Assert.That(
+            font.fallbackFontAssetTable[0].material.shader.name,
+            Is.EqualTo("TextMeshPro/Mobile/Distance Field"),
+            "动态中文后备字体必须与主字体使用相同的 Android 兼容材质。");
+        Assert.That(
+            font.fallbackFontAssetTable[0].atlasPopulationMode,
+            Is.EqualTo(AtlasPopulationMode.Dynamic),
+            "GB2312 后备字体应按需生成，不能再次挤入低精度静态主图集。");
+    }
+
+    [Test]
+    public void AndroidDoesNotForceDesktopRenderingResolution()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Scripts", "GameManager", "GameManager.cs"))
+            .Replace("\r\n", "\n");
+        StringAssert.Contains(
+            "#if UNITY_STANDALONE\n        Screen.SetResolution(1920, 1080, true);\n#endif",
+            source,
+            "固定 1920×1080 只能保留给桌面平台，Android 必须使用原生渲染尺寸。");
+    }
+
+    [Test]
+    public void AndroidBuildAllowsOnlyLandscapeOrientations()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Editor", "FactoryEscapeAutomation.cs"));
+        StringAssert.Contains(
+            "PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;", source);
+        StringAssert.Contains("PlayerSettings.allowedAutorotateToPortrait = false;", source);
+        StringAssert.Contains("PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;", source);
+        StringAssert.Contains("PlayerSettings.allowedAutorotateToLandscapeLeft = true;", source);
+        StringAssert.Contains("PlayerSettings.allowedAutorotateToLandscapeRight = true;", source);
+    }
+
+    [UnityTest]
+    public IEnumerator MainMenuVisibleTextUsesReadablePresentation()
+    {
+        DestroyExistingGameManager();
+        yield return SceneManager.LoadSceneAsync("LoadScene", LoadSceneMode.Single);
+        for (int frame = 0; frame < 90 && FindGameComponent("GameMenu") == null; frame++)
+        {
+            yield return null;
+        }
+
+        TMP_FontAsset font = Resources.Load<TMP_FontAsset>(
+            "Front/ChineseSubset/FactoryEscapeChineseReadable SDF");
+        TMP_Text[] visibleTexts = Resources.FindObjectsOfTypeAll<TMP_Text>()
+            .Where(text => text.gameObject.scene.isLoaded && text.gameObject.activeInHierarchy &&
+                           text.color.a > 0.001f)
+            .ToArray();
+        Assert.That(visibleTexts, Is.Not.Empty, "主菜单必须有明眼人可见的文字。");
+        foreach (TMP_Text text in visibleTexts)
+        {
+            Assert.That(text.font, Is.EqualTo(font), $"{text.name} 没有使用高清主字体。");
+            Assert.That(text.color.r, Is.EqualTo(242f / 255f).Within(0.001f));
+            Assert.That(text.color.g, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(text.color.b, Is.EqualTo(1f).Within(0.001f));
+            if (text is TextMeshProUGUI)
+            {
+                Assert.That(text.fontSize, Is.GreaterThanOrEqualTo(32f));
+                text.ForceMeshUpdate(true);
+                Assert.That(text.isTextOverflowing, Is.False, $"主菜单文字发生溢出：{text.text}");
+            }
+        }
+
+    }
+
     [Test]
     public void ChatHistoryWritesOnlyToPersistentDataPath()
     {

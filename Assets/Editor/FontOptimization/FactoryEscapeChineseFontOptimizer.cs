@@ -16,8 +16,13 @@ public static class FactoryEscapeChineseFontOptimizer
     private const string RequestPath = "Library/FactoryEscapeChineseFontOptimization.request";
     private const string ResultPath = "Library/FactoryEscapeChineseFontOptimization.result";
     private const string CharacterSetPath = "Assets/Editor/FontOptimization/FactoryEscapeChineseCharacterSet.txt";
+    private const string RequiredCharacterSetPath = "Assets/Editor/FontOptimization/FactoryEscapeRequiredCharacterSet.txt";
     private const string SourceFontPath = "Assets/Resources/Front/ChineseSubset/FactoryEscapeChineseSubset.otf";
-    private const string FontAssetPath = "Assets/Resources/Front/ChineseSubset/FactoryEscapeChineseSubset SDF.asset";
+    private const string LegacySubsetFontAssetPath = "Assets/Resources/Front/ChineseSubset/FactoryEscapeChineseSubset SDF.asset";
+    private const string FontAssetPath = "Assets/Resources/Front/ChineseSubset/FactoryEscapeChineseReadable SDF.asset";
+    private const string FallbackFontAssetPath = "Assets/Resources/Front/ChineseSubset/FactoryEscapeChineseFallback SDF.asset";
+    private const string LegacySubsetFontAssetGuid = "fca67701ba9a2794999ccd875ebb6d3d";
+    private const long LegacySubsetMaterialLocalId = 4357687372513342661;
 
     private const string SourceHanFontGuid = "e552070ed1ea96b4db6885a9e9f17e35";
     private const string SourceHanFontAssetGuid = "8f979eb6be14ead429d5a87a4d395bd5";
@@ -36,7 +41,8 @@ public static class FactoryEscapeChineseFontOptimizer
         SimYouFontAssetGuid,
         AaFontGuid,
         AaFontAssetGuid,
-        ZhanKuFontGuid
+        ZhanKuFontGuid,
+        LegacySubsetFontAssetGuid
     };
 
     static FactoryEscapeChineseFontOptimizer()
@@ -44,7 +50,7 @@ public static class FactoryEscapeChineseFontOptimizer
         EditorApplication.delayCall += RunPendingRequest;
     }
 
-    [MenuItem("Tools/Factory Escape/生成通用中文字体")]
+    [MenuItem("Tools/Factory Escape/生成高清中文字体")]
     public static void GenerateFromMenu()
     {
         GenerateAndReplace();
@@ -80,52 +86,62 @@ public static class FactoryEscapeChineseFontOptimizer
             }
         }
 
-        if (AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAssetPath) != null)
+        TMP_FontAsset fontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAssetPath);
+        TMP_FontAsset fallbackFontAsset =
+            AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FallbackFontAssetPath);
+        if ((fontAsset == null) != (fallbackFontAsset == null))
         {
-            throw new InvalidOperationException($"目标字体资产已经存在：{FontAssetPath}");
+            throw new InvalidOperationException("高清主字体与后备字体不完整，无法安全继续。");
         }
 
         AssetDatabase.ImportAsset(CharacterSetPath, ImportAssetOptions.ForceSynchronousImport);
+        AssetDatabase.ImportAsset(RequiredCharacterSetPath, ImportAssetOptions.ForceSynchronousImport);
         AssetDatabase.ImportAsset(SourceFontPath, ImportAssetOptions.ForceSynchronousImport);
 
         TextAsset characterSetAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(CharacterSetPath);
+        TextAsset requiredCharacterSetAsset =
+            AssetDatabase.LoadAssetAtPath<TextAsset>(RequiredCharacterSetPath);
         Font sourceFont = AssetDatabase.LoadAssetAtPath<Font>(SourceFontPath);
-        if (characterSetAsset == null || sourceFont == null)
+        if (characterSetAsset == null || requiredCharacterSetAsset == null || sourceFont == null)
         {
             throw new InvalidOperationException("字符表或子集字体尚未导入 Unity。请等待资源导入完成后重试。");
         }
 
-        string characters = characterSetAsset.text;
-        TMP_FontAsset fontAsset = TMP_FontAsset.CreateFontAsset(
-            sourceFont,
-            48,
-            5,
-            GlyphRenderMode.SDFAA,
-            2048,
-            2048,
-            AtlasPopulationMode.Dynamic,
-            true);
+        string allCharacters = characterSetAsset.text;
+        string requiredCharacters = requiredCharacterSetAsset.text;
         if (fontAsset == null)
         {
-            throw new InvalidOperationException("TMP 字体资产创建失败。");
+            fallbackFontAsset = CreateFontAsset(
+                sourceFont,
+                FallbackFontAssetPath,
+                "FactoryEscapeChineseFallback",
+                GlyphRenderMode.SDFAA_HINTED,
+                AtlasPopulationMode.Dynamic);
+            fontAsset = CreateFontAsset(
+                sourceFont,
+                FontAssetPath,
+                "FactoryEscapeChineseReadable",
+                GlyphRenderMode.SDF32,
+                AtlasPopulationMode.Dynamic);
+            fontAsset.fallbackFontAssetTable = new List<TMP_FontAsset> { fallbackFontAsset };
+
+            if (!fontAsset.TryAddCharacters(
+                    requiredCharacters,
+                    out string missingCharacters,
+                    true) ||
+                !string.IsNullOrEmpty(missingCharacters))
+            {
+                throw new InvalidOperationException(
+                    $"高清主字体缺少 {missingCharacters?.Length ?? 0} 个字符：{missingCharacters}");
+            }
+
+            fontAsset.atlasPopulationMode = AtlasPopulationMode.Static;
         }
 
-        fontAsset.name = "FactoryEscapeChineseSubset SDF";
-        fontAsset.atlasTextures[0].name = "FactoryEscapeChineseSubset Atlas";
-        fontAsset.material.name = "FactoryEscapeChineseSubset Material";
-        AssetDatabase.CreateAsset(fontAsset, FontAssetPath);
-        AssetDatabase.AddObjectToAsset(fontAsset.atlasTextures[0], fontAsset);
-        AssetDatabase.AddObjectToAsset(fontAsset.material, fontAsset);
-
-        if (!fontAsset.TryAddCharacters(characters, out string missingCharacters, true) ||
-            !string.IsNullOrEmpty(missingCharacters))
-        {
-            throw new InvalidOperationException(
-                $"字体图集缺少 {missingCharacters?.Length ?? 0} 个字符：{missingCharacters}");
-        }
-
-        fontAsset.atlasPopulationMode = AtlasPopulationMode.Static;
+        ConfigureReadableMaterial(fontAsset);
+        ConfigureReadableMaterial(fallbackFontAsset);
         EditorUtility.SetDirty(fontAsset);
+        EditorUtility.SetDirty(fallbackFontAsset);
         AssetDatabase.SaveAssets();
 
         string fontAssetGuid = AssetDatabase.AssetPathToGUID(FontAssetPath);
@@ -136,7 +152,7 @@ public static class FactoryEscapeChineseFontOptimizer
                 out long materialLocalId) ||
             materialGuid != fontAssetGuid)
         {
-            throw new InvalidOperationException("无法读取新字体材质的本地文件 ID。");
+            throw new InvalidOperationException("无法读取高清字体材质的本地文件 ID。");
         }
 
         int updatedFiles = ReplaceSerializedReferences(
@@ -144,16 +160,31 @@ public static class FactoryEscapeChineseFontOptimizer
             sourceFontGuid,
             materialLocalId);
         SetDefaultTmpFont(fontAssetGuid);
+        if (AssetDatabase.LoadMainAssetAtPath(LegacySubsetFontAssetPath) != null &&
+            !AssetDatabase.DeleteAsset(LegacySubsetFontAssetPath))
+        {
+            throw new InvalidOperationException($"无法删除旧的低精度字体：{LegacySubsetFontAssetPath}");
+        }
+
         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
         TMP_FontAsset reloadedFontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAssetPath);
+        TMP_FontAsset reloadedFallbackFontAsset =
+            AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FallbackFontAssetPath);
         var missingAfterReload = new List<char>();
         if (reloadedFontAsset == null ||
-            !reloadedFontAsset.HasCharacters(characters, out missingAfterReload) ||
+            !reloadedFontAsset.HasCharacters(requiredCharacters, out missingAfterReload) ||
             missingAfterReload.Count > 0)
         {
             throw new InvalidOperationException(
-                $"字体重新导入后的字符覆盖验证失败，缺少 {missingAfterReload?.Count ?? 0} 个字符。");
+                $"高清主字体重新导入后缺少 {missingAfterReload?.Count ?? 0} 个字符。");
+        }
+
+        if (reloadedFallbackFontAsset == null ||
+            reloadedFallbackFontAsset.atlasPopulationMode != AtlasPopulationMode.Dynamic ||
+            reloadedFallbackFontAsset.sourceFontFile == null)
+        {
+            throw new InvalidOperationException("GB2312 动态后备字体配置无效。");
         }
 
         string[] remainingReferences = FindLegacyReferences();
@@ -165,14 +196,63 @@ public static class FactoryEscapeChineseFontOptimizer
 
         int atlasCount = reloadedFontAsset.atlasTextures.Count(texture => texture != null);
         string result =
-            $"characters={characters.Length}\n" +
+            $"requiredCharacters={requiredCharacters.Length}\n" +
+            $"fallbackCharacters={allCharacters.Length}\n" +
             $"atlasTextures={atlasCount}\n" +
             $"updatedFiles={updatedFiles}\n" +
             $"fontAsset={FontAssetPath}\n" +
             $"fontAssetGuid={fontAssetGuid}\n" +
             $"materialLocalId={materialLocalId}";
-        Debug.Log("通用中文字体生成完成：\n" + result);
+        Debug.Log("高清中文字体生成完成：\n" + result);
         return result;
+    }
+
+    private static TMP_FontAsset CreateFontAsset(
+        Font sourceFont,
+        string assetPath,
+        string assetName,
+        GlyphRenderMode renderMode,
+        AtlasPopulationMode populationMode)
+    {
+        TMP_FontAsset fontAsset = TMP_FontAsset.CreateFontAsset(
+            sourceFont,
+            90,
+            9,
+            renderMode,
+            2048,
+            2048,
+            populationMode,
+            true);
+        if (fontAsset == null)
+        {
+            throw new InvalidOperationException($"TMP 字体资产创建失败：{assetPath}");
+        }
+
+        fontAsset.name = assetName + " SDF";
+        fontAsset.atlasTextures[0].name = assetName + " Atlas";
+        fontAsset.material.name = assetName + " Material";
+        AssetDatabase.CreateAsset(fontAsset, assetPath);
+        AssetDatabase.AddObjectToAsset(fontAsset.atlasTextures[0], fontAsset);
+        AssetDatabase.AddObjectToAsset(fontAsset.material, fontAsset);
+        return fontAsset;
+    }
+
+    private static void ConfigureReadableMaterial(TMP_FontAsset fontAsset)
+    {
+        Shader shader = Shader.Find("TextMeshPro/Mobile/Distance Field");
+        if (shader == null)
+        {
+            throw new InvalidOperationException("找不到 TextMeshPro/Mobile/Distance Field shader。");
+        }
+
+        Material material = fontAsset.material;
+        material.shader = shader;
+        material.SetTexture(ShaderUtilities.ID_MainTex, fontAsset.atlasTextures[0]);
+        material.SetColor(ShaderUtilities.ID_FaceColor, Color.white);
+        material.SetColor(ShaderUtilities.ID_OutlineColor, Color.black);
+        material.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.12f);
+        material.SetFloat(ShaderUtilities.ID_OutlineSoftness, 0f);
+        EditorUtility.SetDirty(material);
     }
 
     private static int ReplaceSerializedReferences(
@@ -183,6 +263,8 @@ public static class FactoryEscapeChineseFontOptimizer
         int updatedFiles = 0;
         string oldMaterialReference =
             $"fileID: {SourceHanMaterialLocalId}, guid: {SourceHanFontAssetGuid}";
+        string legacySubsetMaterialReference =
+            $"fileID: {LegacySubsetMaterialLocalId}, guid: {LegacySubsetFontAssetGuid}";
         string newMaterialReference =
             $"fileID: {materialLocalId}, guid: {fontAssetGuid}";
 
@@ -190,9 +272,11 @@ public static class FactoryEscapeChineseFontOptimizer
         {
             string content = File.ReadAllText(assetPath);
             string updated = content.Replace(oldMaterialReference, newMaterialReference);
+            updated = updated.Replace(legacySubsetMaterialReference, newMaterialReference);
             updated = updated.Replace(SourceHanFontAssetGuid, fontAssetGuid);
             updated = updated.Replace(SimYouFontAssetGuid, fontAssetGuid);
             updated = updated.Replace(AaFontAssetGuid, fontAssetGuid);
+            updated = updated.Replace(LegacySubsetFontAssetGuid, fontAssetGuid);
             updated = updated.Replace(SourceHanFontGuid, sourceFontGuid);
             updated = updated.Replace(SimYouFontGuid, sourceFontGuid);
             updated = updated.Replace(AaFontGuid, sourceFontGuid);
@@ -213,10 +297,17 @@ public static class FactoryEscapeChineseFontOptimizer
     {
         const string settingsPath = "Assets/TextMesh Pro/Resources/TMP Settings.asset";
         string content = File.ReadAllText(settingsPath);
+        string expectedReference =
+            $"  m_defaultFontAsset: {{fileID: 11400000, guid: {fontAssetGuid}, type: 2}}";
+        if (content.Contains(expectedReference, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         string updated = Regex.Replace(
             content,
             @"(?m)^  m_defaultFontAsset: .*?$",
-            $"  m_defaultFontAsset: {{fileID: 11400000, guid: {fontAssetGuid}, type: 2}}",
+            expectedReference,
             RegexOptions.CultureInvariant);
         if (updated == content)
         {
