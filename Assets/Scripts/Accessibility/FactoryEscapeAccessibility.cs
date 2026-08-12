@@ -40,6 +40,9 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private MainMenuPage mainMenuPage;
     private float nextRefreshTime;
     private bool announceNextRefresh;
+    private string currentVisualSignature = string.Empty;
+    private PortraitTextPresentation portraitPresentation;
+    private GameMenu currentMainMenu;
 
 #if UNITY_EDITOR
     [Serializable]
@@ -152,6 +155,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private void OnEnable()
     {
         instance = this;
+        portraitPresentation = GetComponent<PortraitTextPresentation>();
+        if (portraitPresentation == null)
+        {
+            portraitPresentation = gameObject.AddComponent<PortraitTextPresentation>();
+        }
+        portraitPresentation.LayoutRebuilt += OnPortraitLayoutRebuilt;
 #if UNITY_EDITOR
         if (File.Exists(GetPreviewPath("enabled")))
         {
@@ -166,6 +175,10 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
 
     private void OnDisable()
     {
+        if (portraitPresentation != null)
+        {
+            portraitPresentation.LayoutRebuilt -= OnPortraitLayoutRebuilt;
+        }
         SceneManager.sceneLoaded -= OnSceneLoaded;
         SceneManager.sceneUnloaded -= OnSceneUnloaded;
         AssistiveSupport.screenReaderStatusChanged -= OnScreenReaderStatusChanged;
@@ -187,7 +200,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         UpdateEditorPreview();
 #endif
 
-        if (!AssistiveSupport.isScreenReaderEnabled || Time.unscaledTime < nextRefreshTime)
+        if (Time.unscaledTime < nextRefreshTime)
         {
             return;
         }
@@ -195,7 +208,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         nextRefreshTime = Time.unscaledTime + 0.5f;
         List<Item> items = CollectItems();
         string signature = BuildSignature(items);
-        if (signature != currentSignature)
+        if (signature != currentVisualSignature)
+        {
+            PresentPortrait(items, signature);
+        }
+
+        if (AssistiveSupport.isScreenReaderEnabled && signature != currentSignature)
         {
             bool notify = announceNextRefresh;
             announceNextRefresh = false;
@@ -232,12 +250,22 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         }
     }
 
+    private void OnPortraitLayoutRebuilt()
+    {
+        if (AssistiveSupport.activeHierarchy == hierarchy)
+        {
+            hierarchy.RefreshNodeFrames();
+        }
+    }
+
     private IEnumerator RefreshAfterLayout(bool screenChanged)
     {
         yield return new WaitForEndOfFrame();
+        List<Item> items = CollectItems();
+        PresentPortrait(items, BuildSignature(items));
         if (AssistiveSupport.isScreenReaderEnabled)
         {
-            Rebuild(CollectItems(), screenChanged);
+            Rebuild(items, screenChanged);
         }
     }
 
@@ -255,7 +283,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
             node.value = item.value;
             node.role = item.role;
             node.state = item.state;
-            node.frame = new Rect(0, index * rowHeight, Screen.width, rowHeight);
+            string itemKey = item.key;
+            Rect fallbackFrame = new Rect(0, index * rowHeight, Screen.width, rowHeight);
+            node.frameGetter = () => portraitPresentation != null &&
+                                     portraitPresentation.TryGetScreenFrame(itemKey, out Rect visualFrame)
+                ? visualFrame
+                : fallbackFrame;
             if (item.activate != null)
             {
                 node.invoked += item.activate;
@@ -745,7 +778,9 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         Button[] visibleButtons = FindObjectsByType<Button>(
                 FindObjectsInactive.Exclude, FindObjectsSortMode.None)
             .Where(button => button.isActiveAndEnabled && button.interactable &&
-                             button.gameObject.activeInHierarchy)
+                             button.gameObject.activeInHierarchy &&
+                             (portraitPresentation == null ||
+                              !portraitPresentation.Contains(button.transform)))
             .ToArray();
 
         foreach (Button button in visibleButtons.Where(button =>
@@ -774,7 +809,10 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         }
 
         foreach (InputField input in FindObjectsByType<InputField>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)
-                     .Where(input => input.isActiveAndEnabled && input.interactable && input.gameObject.activeInHierarchy))
+                     .Where(input => input.isActiveAndEnabled && input.interactable &&
+                                     input.gameObject.activeInHierarchy &&
+                                     (portraitPresentation == null ||
+                                      !portraitPresentation.Contains(input.transform))))
         {
             items.Add(new Item
             {
@@ -816,6 +854,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         if (gameMenu == null)
         {
             return items;
+        }
+
+        if (currentMainMenu != gameMenu)
+        {
+            currentMainMenu = gameMenu;
+            mainMenuPage = MainMenuPage.Root;
         }
 
         if (gameMenu.AwaitingNewGameConfirmation)
@@ -938,7 +982,149 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     {
         announceNextRefresh = true;
         currentSignature = string.Empty;
+        currentVisualSignature = string.Empty;
         nextRefreshTime = 0f;
+    }
+
+    private void PresentPortrait(List<Item> items, string signature)
+    {
+        if (portraitPresentation == null)
+        {
+            return;
+        }
+
+        List<PortraitTextPresentation.Entry> entries = items.Select(item =>
+            new PortraitTextPresentation.Entry
+            {
+                key = item.key,
+                label = item.label,
+                value = item.value,
+                actionable = item.activate != null,
+                editable = item.setValue != null,
+                disabled = (item.state & AccessibilityState.Disabled) != 0,
+                header = item.role == AccessibilityRole.Header,
+                activate = item.activate,
+                setValue = item.setValue
+            }).ToList();
+        portraitPresentation.Present(GetPortraitTitle(), GetPortraitArtwork(), entries);
+        currentVisualSignature = signature;
+    }
+
+    private string GetPortraitTitle()
+    {
+        VideoManager videoManager = FindFirstObjectByType<VideoManager>();
+        if (videoManager != null && videoManager.cutSceneUIPanel.gameObject.activeInHierarchy)
+        {
+            return "剧情";
+        }
+
+        DialogSystem dialogSystem = FindFirstObjectByType<DialogSystem>();
+        if (dialogSystem != null && dialogSystem.dialogPanel.activeInHierarchy)
+        {
+            return "对话";
+        }
+
+        if (dialogSystem != null && dialogSystem.AIDialogPanel.gameObject.activeInHierarchy)
+        {
+            return "823 对话";
+        }
+
+        UIManager uiManager = FindFirstObjectByType<UIManager>();
+        if (uiManager != null && uiManager.textNodeUI != null &&
+            uiManager.textNodeUI.gameObject.activeInHierarchy)
+        {
+            return "文本阅读";
+        }
+
+        if (uiManager != null && uiManager.graphNodeUI != null &&
+            uiManager.graphNodeUI.gameObject.activeInHierarchy)
+        {
+            return "图片线索";
+        }
+
+        if (IsSceneLoaded("MainMenu") && !IsSceneLoaded("GameScene"))
+        {
+            switch (mainMenuPage)
+            {
+                case MainMenuPage.MusicVolume:
+                    return "音乐音量";
+                case MainMenuPage.SfxVolume:
+                    return "音效音量";
+                case MainMenuPage.Options:
+                    return "选项";
+                default:
+                    return "抓住未尽的余晖";
+            }
+        }
+
+        return IsSceneLoaded("GameScene") ? "节点调查" : GetCurrentScreenName();
+    }
+
+    private Sprite GetPortraitArtwork()
+    {
+        UIManager uiManager = FindFirstObjectByType<UIManager>();
+        if (uiManager != null && uiManager.graphNodeUI != null &&
+            uiManager.graphNodeUI.gameObject.activeInHierarchy)
+        {
+            Sprite graph = FindLargestSprite(uiManager.graphNodeUI);
+            if (graph != null)
+            {
+                return graph;
+            }
+        }
+
+        VideoManager videoManager = FindFirstObjectByType<VideoManager>();
+        if (videoManager != null && videoManager.cutSceneUIPanel.gameObject.activeInHierarchy)
+        {
+            Sprite cutScene = FindLargestSprite(videoManager.cutSceneUIPanel);
+            if (cutScene != null)
+            {
+                return cutScene;
+            }
+        }
+
+        DialogSystem dialogSystem = FindFirstObjectByType<DialogSystem>();
+        if (dialogSystem != null)
+        {
+            if (dialogSystem.AIDialogPanel.gameObject.activeInHierarchy)
+            {
+                Sprite ai = dialogSystem.AICharacter_1 != null && dialogSystem.AICharacter_1.gameObject.activeInHierarchy
+                    ? dialogSystem.AICharacter_1.sprite
+                    : dialogSystem.AICharacter_2?.sprite;
+                if (ai != null)
+                {
+                    return ai;
+                }
+            }
+
+            if (dialogSystem.dialogPanel.activeInHierarchy)
+            {
+                Sprite character = dialogSystem.character_1 != null && dialogSystem.character_1.gameObject.activeInHierarchy
+                    ? dialogSystem.character_1.sprite
+                    : dialogSystem.character_2?.sprite;
+                if (character != null)
+                {
+                    return character;
+                }
+            }
+        }
+
+        return FindObjectsByType<Image>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)
+            .Where(image => image.sprite != null && image.gameObject.activeInHierarchy &&
+                            (portraitPresentation == null ||
+                             !portraitPresentation.Contains(image.transform)))
+            .OrderByDescending(image => image.sprite.rect.width * image.sprite.rect.height)
+            .Select(image => image.sprite)
+            .FirstOrDefault();
+    }
+
+    private static Sprite FindLargestSprite(Transform root)
+    {
+        return root.GetComponentsInChildren<Image>(false)
+            .Where(image => image.sprite != null)
+            .OrderByDescending(image => image.sprite.rect.width * image.sprite.rect.height)
+            .Select(image => image.sprite)
+            .FirstOrDefault();
     }
 
     private static bool IsSceneLoaded(string sceneName)

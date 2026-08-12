@@ -63,16 +63,74 @@ public sealed class AccessibilitySmokeTests
     }
 
     [Test]
-    public void AndroidBuildAllowsOnlyLandscapeOrientations()
+    public void AndroidBuildAllowsOnlyPortraitOrientation()
     {
         string source = File.ReadAllText(Path.Combine(
             Application.dataPath, "Editor", "FactoryEscapeAutomation.cs"));
         StringAssert.Contains(
-            "PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;", source);
-        StringAssert.Contains("PlayerSettings.allowedAutorotateToPortrait = false;", source);
+            "PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;", source);
+        StringAssert.Contains("PlayerSettings.allowedAutorotateToPortrait = true;", source);
         StringAssert.Contains("PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;", source);
-        StringAssert.Contains("PlayerSettings.allowedAutorotateToLandscapeLeft = true;", source);
-        StringAssert.Contains("PlayerSettings.allowedAutorotateToLandscapeRight = true;", source);
+        StringAssert.Contains("PlayerSettings.allowedAutorotateToLandscapeLeft = false;", source);
+        StringAssert.Contains("PlayerSettings.allowedAutorotateToLandscapeRight = false;", source);
+    }
+
+    [UnityTest]
+    public IEnumerator PortraitPresentationShowsReadableMainMenuRows()
+    {
+        DestroyExistingGameManager();
+        yield return SceneManager.LoadSceneAsync("LoadScene", LoadSceneMode.Single);
+        for (int frame = 0; frame < 240 &&
+             !SceneManager.GetSceneByName("MainMenu").isLoaded; frame++)
+        {
+            yield return null;
+        }
+        Assert.That(SceneManager.GetSceneByName("MainMenu").isLoaded, Is.True,
+            "竖屏主菜单测试必须等待真正的主菜单场景加载完成。 ");
+        if (SceneManager.GetSceneByName("GameScene").isLoaded)
+        {
+            yield return SceneManager.UnloadSceneAsync("GameScene");
+        }
+        yield return new WaitForSecondsRealtime(0.6f);
+
+        MonoBehaviour presentation = Resources.FindObjectsOfTypeAll<MonoBehaviour>()
+            .FirstOrDefault(component => component.GetType().Name == "PortraitTextPresentation");
+        Assert.That(presentation, Is.Not.Null, "竖屏文字呈现层必须随应用启动。 ");
+        System.Reflection.PropertyInfo entryCountProperty =
+            presentation.GetType().GetProperty("EntryCount");
+        System.Reflection.PropertyInfo rootProperty =
+            presentation.GetType().GetProperty("PresentationRoot");
+        Assert.That(entryCountProperty, Is.Not.Null);
+        Assert.That(rootProperty, Is.Not.Null);
+        for (int frame = 0; frame < 120; frame++)
+        {
+            Transform currentRoot = (Transform)rootProperty.GetValue(presentation);
+            bool mainMenuReady = (int)entryCountProperty.GetValue(presentation) == 4 &&
+                                 currentRoot.GetComponentsInChildren<TMP_Text>(false)
+                                     .Any(text => text.text == "开始游戏");
+            if (mainMenuReady)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        string presentationSource = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Scripts", "Accessibility", "PortraitTextPresentation.cs"));
+        StringAssert.Contains("new Vector2(1080f, 2400f)", presentationSource);
+        Transform presentationRoot = (Transform)rootProperty.GetValue(presentation);
+        TMP_Text[] texts = presentationRoot.GetComponentsInChildren<TMP_Text>(false);
+        Assert.That((int)entryCountProperty.GetValue(presentation), Is.EqualTo(4),
+            $"主菜单竖屏层应显示开始、继续、选项和退出四个动作。当前文字：{string.Join("|", texts.Select(text => text.text))}");
+        Assert.That(texts.Any(text => text.text == "抓住未尽的余晖"), Is.True);
+        Assert.That(texts.Any(text => text.text == "开始游戏"), Is.True);
+        Assert.That(texts.All(text => text.fontSize >= 38f), Is.True,
+            "竖屏可见文字不得小于 38。 ");
+        Assert.That(texts.All(text => text.font != null), Is.True,
+            "竖屏可见文字必须使用可渲染中文的 TMP 字体。 ");
+        Assert.That(texts.All(text => text.fontSharedMaterial != text.font.material), Is.True,
+            "竖屏文字必须使用独立材质，避免原界面动画把标题或正文改成透明。 ");
     }
 
     [UnityTest]
@@ -521,6 +579,10 @@ public sealed class AccessibilitySmokeTests
             hierarchy.rootNodes.All(node => node.role == AccessibilityRole.Button),
             Is.True,
             "主菜单的所有焦点都必须是可操作菜单项。");
+        Assert.That(
+            hierarchy.rootNodes.All(node => node.frameGetter != null),
+            Is.True,
+            "竖屏视觉行会因布局与滚动移动，无障碍焦点框必须实时读取视觉坐标。");
 
         string[] removedLabels = { "主菜单", "主选单", "务必联网进行游戏", "将此节点长按拖至“游戏”" };
         Assert.That(

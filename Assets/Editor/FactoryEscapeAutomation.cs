@@ -20,29 +20,47 @@ public static class FactoryEscapeAutomation
 
     public static void BuildAndroid()
     {
+        BuildAndroidPlayer("Builds/Android/FactoryEscape.apk", AndroidArchitecture.ARM64);
+    }
+
+    public static void BuildAndroidEmulator()
+    {
+        BuildAndroidPlayer("Builds/Android/FactoryEscape-Emulator.apk", AndroidArchitecture.X86_64);
+    }
+
+    private static void BuildAndroidPlayer(string outputPath, AndroidArchitecture architecture)
+    {
         string[] scenes = EditorBuildSettings.scenes
             .Where(scene => scene.enabled)
             .Select(scene => scene.path)
             .ToArray();
-        const string outputPath = "Builds/Android/FactoryEscape.apk";
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
 
+        AndroidArchitecture previousArchitecture = PlayerSettings.Android.targetArchitectures;
         PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
-        PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+        PlayerSettings.Android.targetArchitectures = architecture;
         PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
-        PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
-        PlayerSettings.allowedAutorotateToPortrait = false;
+        PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
+        PlayerSettings.allowedAutorotateToPortrait = true;
         PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
-        PlayerSettings.allowedAutorotateToLandscapeLeft = true;
-        PlayerSettings.allowedAutorotateToLandscapeRight = true;
+        PlayerSettings.allowedAutorotateToLandscapeLeft = false;
+        PlayerSettings.allowedAutorotateToLandscapeRight = false;
 
-        BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+        BuildReport report;
+        try
         {
-            scenes = scenes,
-            locationPathName = outputPath,
-            target = BuildTarget.Android,
-            options = BuildOptions.None
-        });
+            report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = scenes,
+                locationPathName = outputPath,
+                target = BuildTarget.Android,
+                options = BuildOptions.None
+            });
+        }
+        finally
+        {
+            PlayerSettings.Android.targetArchitectures = previousArchitecture;
+        }
 
         Debug.Log($"Android build: {report.summary.result}; scenes={scenes.Length}; " +
                   $"bytes={report.summary.totalSize}; output={outputPath}");
@@ -323,13 +341,13 @@ public static class FactoryEscapeAutomation
             if (scaler != null)
             {
                 canvasChanged |= scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize ||
-                                 scaler.referenceResolution != new Vector2(1920f, 1080f) ||
+                                 scaler.referenceResolution != new Vector2(1080f, 2400f) ||
                                  scaler.screenMatchMode != CanvasScaler.ScreenMatchMode.MatchWidthOrHeight ||
-                                 !Mathf.Approximately(scaler.matchWidthOrHeight, 0.5f);
+                                 !Mathf.Approximately(scaler.matchWidthOrHeight, 0f);
                 scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.referenceResolution = new Vector2(1080f, 2400f);
                 scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-                scaler.matchWidthOrHeight = 0.5f;
+                scaler.matchWidthOrHeight = 0f;
                 EditorUtility.SetDirty(scaler);
             }
 
