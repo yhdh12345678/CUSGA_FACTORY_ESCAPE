@@ -15,7 +15,7 @@ using UnityEngine.UI;
 public static class FactoryEscapeAutomation
 {
     private const string ReadableFontAssetPath =
-        "Assets/Resources/Front/ChineseSubset/FactoryEscapeChineseReadable SDF.asset";
+        "Assets/Resources/Front/ChineseSubset/FactoryEscapeChineseFallback SDF.asset";
     private static readonly Color ReadableTextColor = new Color32(242, 255, 255, 255);
 
     public static void BuildAndroid()
@@ -72,10 +72,10 @@ public static class FactoryEscapeAutomation
 
     public static void CaptureReadabilityFrame()
     {
-        TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(ReadableFontAssetPath);
-        if (font == null || font.material.shader.name != "TextMeshPro/Mobile/Distance Field")
+        TMP_FontAsset font = SystemChineseFontProvider.CurrentFont;
+        if (font == null || font.atlasPopulationMode == AtlasPopulationMode.Static)
         {
-            throw new InvalidOperationException("高清中文字体没有使用 Android 兼容材质。");
+            throw new InvalidOperationException("系统中文字体或动态后备字体不可用。");
         }
 
         Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/MainMenu.unity", OpenSceneMode.Single);

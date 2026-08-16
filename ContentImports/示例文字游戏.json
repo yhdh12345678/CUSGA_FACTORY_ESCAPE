@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "gameId": "sample-novel",
+  "displayName": "雨夜来信",
+  "protagonistName": "林晓",
+  "firstPageId": "chapter1-arrival",
+  "chapters": [
+    {
+      "id": "chapter1",
+      "title": "第一章 雨夜"
+    }
+  ],
+  "pages": [
+    {
+      "id": "chapter1-arrival",
+      "chapterId": "chapter1",
+      "title": "车站",
+      "visualDescription": "夜雨落在空旷站台上，远处只有一盏昏黄的灯。",
+      "artworkPath": "",
+      "lines": [
+        {
+          "speaker": "旁白",
+          "text": "林晓在长椅旁发现一封没有署名的信。"
+        },
+        {
+          "speaker": "林晓",
+          "text": "这封信为什么会写着我的名字？"
+        }
+      ],
+      "nextPageId": "chapter1-choice",
+      "choices": []
+    },
+    {
+      "id": "chapter1-choice",
+      "chapterId": "chapter1",
+      "title": "未署名的信",
+      "visualDescription": "白色信封被雨水打湿，封口处画着一个小小的圆圈。",
+      "artworkPath": "",
+      "lines": [
+        {
+          "speaker": "旁白",
+          "text": "她必须决定是否立刻拆开信封。"
+        }
+      ],
+      "nextPageId": "",
+      "choices": [
+        {
+          "id": "open",
+          "label": "现在拆开信封",
+          "nextPageId": "chapter1-opened"
+        },
+        {
+          "id": "keep",
+          "label": "先把信收好",
+          "nextPageId": "chapter1-kept"
+        }
+      ]
+    },
+    {
+      "id": "chapter1-opened",
+      "chapterId": "chapter1",
+      "title": "信中的约定",
+      "visualDescription": "信纸上只有一行清晰的黑色字迹。",
+      "artworkPath": "",
+      "lines": [
+        {
+          "speaker": "旁白",
+          "text": "信上约她明天清晨回到这里。"
+        }
+      ],
+      "nextPageId": "",
+      "choices": []
+    },
+    {
+      "id": "chapter1-kept",
+      "chapterId": "chapter1",
+      "title": "带走秘密",
+      "visualDescription": "林晓把信放进口袋，转身走入站外的雨幕。",
+      "artworkPath": "",
+      "lines": [
+        {
+          "speaker": "旁白",
+          "text": "她决定等回到安全的地方再打开它。"
+        }
+      ],
+      "nextPageId": "",
+      "choices": []
+    }
+  ]
+}

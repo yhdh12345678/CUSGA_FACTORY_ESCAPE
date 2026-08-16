@@ -110,6 +110,29 @@ public class tongyi_AI : MonoBehaviour
         input_field.SetActive(activeSelf);
     }
 
+    public bool SubmitPresetResponse(string content, int anxietyChange)
+    {
+        if (requestInProgress || SubmitTimer <= 0 || string.IsNullOrWhiteSpace(content) ||
+            DialogSystem.Instance == null || !DialogSystem.Instance.textFinished)
+        {
+            return false;
+        }
+
+        DialogSystem.Instance.AddAIDialogLogCell("小明", content);
+        writeAndLoadHistory.writeText(new string[] { "小明", "user", content });
+        anxiety_change_value = Mathf.Min(0, anxietyChange);
+        reply_text = anxiety_change_value <= three_change_value
+            ? "谢谢你，小明。我感觉好多了。"
+            : anxiety_change_value <= two_change_value
+                ? "我会慢慢来，谢谢你陪着我。"
+                : "我听见了，但我还是有些紧张。";
+        reply_is_finished = true;
+        writeAndLoadHistory.writeText(new string[] { "823", "assistant", reply_text });
+        DialogSystem.Instance.get_text_in_other_ways("823", reply_text);
+        StaticEventHandler.CallCommit(anxiety_change_value);
+        return true;
+    }
+
     //获取内容兼发送
     public async void  sendMessage(robotCollection bot)
     {

@@ -23,7 +23,15 @@ public enum GameState
 public class GameManager : SingletonMonobehaviour<GameManager>
 {
     private const int SaveVersion = 2;
+    private const int TextStorySaveVersion = 1;
     private const string ProgressProfileName = "GameProgress";
+
+    [Header("游戏内容")]
+    [Tooltip("同一个 App 内可选择的全部子游戏")]
+    public TextAdventureCatalogSO gameCatalog;
+    [Tooltip("当前选中的子游戏；启动时默认使用目录第一项")]
+    public TextAdventureGameSO gameDefinition;
+    private TextAdventureSession textStorySession;
 
     [Header("AI参数")]
     [Tooltip("AI当前焦虑值")]
@@ -77,6 +85,8 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
     override protected void Awake() {
         base.Awake();
+        InitializeGameCatalog();
+        InitializeGameDefinition();
 #if UNITY_STANDALONE
         Screen.SetResolution(1920, 1080, true);
 #endif
@@ -97,7 +107,102 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         StaticEventHandler.OnGetResult -= StaticEventHandler_OnGetResult;
     }
 
-    public bool HasSavedGame => SaveManager.Exists(ProgressProfileName);
+    private void InitializeGameDefinition()
+    {
+        if (gameDefinition == null)
+        {
+            return;
+        }
+
+        List<string> errors = TextAdventureGameValidator.Validate(gameDefinition);
+        if (errors.Count > 0)
+        {
+            Debug.LogError($"游戏内容校验失败：\n{string.Join("\n", errors)}");
+            return;
+        }
+
+        if (gameDefinition.mode == TextAdventureGameMode.LegacyNodeAdventure)
+        {
+            nodeLevelSOs = new List<NodeLevelSO>(gameDefinition.legacyLevels);
+            if (gameDefinition.primaryEnding.Count > 0)
+            {
+                winCutScene = new List<CutSceneCell>(gameDefinition.primaryEnding);
+            }
+            if (gameDefinition.alternateEnding.Count > 0)
+            {
+                fakeCutScene = new List<CutSceneCell>(gameDefinition.alternateEnding);
+            }
+        }
+
+        textStorySession = null;
+    }
+
+    private void InitializeGameCatalog()
+    {
+        if (gameCatalog == null)
+        {
+            return;
+        }
+
+        List<string> errors = TextAdventureCatalogValidator.Validate(gameCatalog);
+        if (errors.Count > 0)
+        {
+            Debug.LogError($"子游戏目录校验失败：\n{string.Join("\n", errors)}");
+            return;
+        }
+
+        if (gameDefinition == null || !gameCatalog.games.Contains(gameDefinition))
+        {
+            gameDefinition = gameCatalog.games[0];
+        }
+    }
+
+    public IReadOnlyList<TextAdventureGameSO> AvailableGames => gameCatalog == null
+        ? gameDefinition == null
+            ? Array.Empty<TextAdventureGameSO>()
+            : new[] { gameDefinition }
+        : gameCatalog.games;
+
+    public bool SelectGame(TextAdventureGameSO game)
+    {
+        bool isAvailable = gameCatalog == null
+            ? game == gameDefinition
+            : gameCatalog.games.Contains(game);
+        if (sceneTransitionInProgress || game == null || !isAvailable)
+        {
+            return false;
+        }
+
+        gameDefinition = game;
+        gameState = GameState.Start;
+        restoredFromSave = false;
+        InitializeGameDefinition();
+        return true;
+    }
+
+    public bool IsTextStoryMode => gameDefinition != null &&
+        gameDefinition.mode == TextAdventureGameMode.TextStory;
+    public string DisplayName => string.IsNullOrWhiteSpace(gameDefinition?.displayName)
+        ? "抓住未尽的余晖"
+        : gameDefinition.displayName;
+    public TextAdventurePage CurrentTextStoryPage => textStorySession?.CurrentPage;
+    private int SkyUiLevelIndex => gameDefinition != null &&
+        gameDefinition.mode == TextAdventureGameMode.LegacyNodeAdventure
+            ? gameDefinition.skyUiLevelIndex
+            : 8;
+    public string CurrentTextStoryChapterTitle
+    {
+        get
+        {
+            string chapterId = CurrentTextStoryPage?.chapterId;
+            return gameDefinition?.story?.chapters?.Find(chapter =>
+                chapter != null && chapter.id == chapterId)?.title ?? string.Empty;
+        }
+    }
+    private string ActiveProgressProfileName => gameDefinition == null
+        ? ProgressProfileName
+        : gameDefinition.SaveProfileName;
+    public bool HasSavedGame => SaveManager.Exists(ActiveProgressProfileName);
     public bool IsSaveAndQuitStarted => saveAndQuitStarted;
     public bool IsSceneTransitionInProgress => sceneTransitionInProgress;
 
@@ -121,6 +226,19 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
     public void StartNewGame()
     {
+        if (IsTextStoryMode)
+        {
+            SaveManager.Delete(gameDefinition.SaveProfileName);
+            textStorySession = new TextAdventureSession(gameDefinition);
+            if (!textStorySession.Start(out string storyError))
+            {
+                Debug.LogError(storyError);
+            }
+            gameState = GameState.Start;
+            restoredFromSave = false;
+            return;
+        }
+
         DeleteSavedGame();
         levelIndex = 0;
         graphIndex = 0;
@@ -138,8 +256,13 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
     public bool TryLoadSavedGame(out string errorMessage)
     {
+        if (IsTextStoryMode)
+        {
+            return TryLoadTextStory(out errorMessage);
+        }
+
         IReadOnlyList<SaveProfile<GameProgressState>> candidates =
-            SaveManager.LoadCandidates<GameProgressState>(ProgressProfileName);
+            SaveManager.LoadCandidates<GameProgressState>(ActiveProgressProfileName);
         if (candidates.Count == 0)
         {
             errorMessage = HasSavedGame ? "存档损坏，无法继续游戏" : "没有可继续的游戏";
@@ -172,7 +295,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
                 try
                 {
                     SaveManager.SaveOrReplace(
-                        new SaveProfile<GameProgressState>(ProgressProfileName, save));
+                        new SaveProfile<GameProgressState>(ActiveProgressProfileName, save));
                 }
                 catch (Exception exception)
                 {
@@ -186,6 +309,66 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         }
 
         errorMessage = candidateError;
+        return false;
+    }
+
+    public bool ContinueTextStory()
+    {
+        string errorMessage = "剧情尚未准备好";
+        if (!IsTextStoryMode || textStorySession == null ||
+            !textStorySession.Continue(out errorMessage))
+        {
+            Announce(errorMessage ?? "剧情尚未准备好");
+            return false;
+        }
+
+        FactoryEscapeAccessibility.RefreshScreen("story-description");
+        return true;
+    }
+
+    public bool ChooseTextStory(string choiceId)
+    {
+        string errorMessage = "剧情尚未准备好";
+        if (!IsTextStoryMode || textStorySession == null ||
+            !textStorySession.Choose(choiceId, out errorMessage))
+        {
+            Announce(errorMessage ?? "剧情尚未准备好");
+            return false;
+        }
+
+        FactoryEscapeAccessibility.RefreshScreen("story-description");
+        return true;
+    }
+
+    private bool TryLoadTextStory(out string errorMessage)
+    {
+        IReadOnlyList<SaveProfile<TextStoryProgressState>> candidates =
+            SaveManager.LoadCandidates<TextStoryProgressState>(gameDefinition.SaveProfileName);
+        foreach (SaveProfile<TextStoryProgressState> candidate in candidates)
+        {
+            TextStoryProgressState save = candidate.saveData;
+            if (save == null || save.version != TextStorySaveVersion ||
+                save.gameId != gameDefinition.gameId)
+            {
+                continue;
+            }
+
+            var session = new TextAdventureSession(gameDefinition);
+            if (!session.Restore(save.pageId, out errorMessage))
+            {
+                continue;
+            }
+
+            textStorySession = session;
+            gameState = GameState.Playing;
+            restoredFromSave = true;
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        errorMessage = HasSavedGame
+            ? "存档损坏，无法继续游戏"
+            : "没有可继续的游戏";
         return false;
     }
 
@@ -376,6 +559,11 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
     private bool TrySaveCurrentProgress(out string errorMessage)
     {
+        if (IsTextStoryMode)
+        {
+            return TrySaveTextStoryProgress(out errorMessage);
+        }
+
         string saveGeneration = null;
         List<string> generatedProfiles = new List<string>();
         bool progressCommitted = false;
@@ -417,7 +605,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
             }
 
             IReadOnlyList<SaveProfile<GameProgressState>> previousCandidates =
-                SaveManager.LoadCandidates<GameProgressState>(ProgressProfileName);
+                SaveManager.LoadCandidates<GameProgressState>(ActiveProgressProfileName);
 
             var progress = new GameProgressState
             {
@@ -433,7 +621,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
                 previousChapterBot = previousChapterBot,
                 level1GetResultTimes = level1GetResultTimes
             };
-            SaveManager.SaveOrReplace(new SaveProfile<GameProgressState>(ProgressProfileName, progress));
+            SaveManager.SaveOrReplace(new SaveProfile<GameProgressState>(ActiveProgressProfileName, progress));
             progressCommitted = true;
 
             foreach (SaveProfile<GameProgressState> obsoleteCandidate in previousCandidates.Skip(1))
@@ -467,11 +655,42 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         }
     }
 
+    private bool TrySaveTextStoryProgress(out string errorMessage)
+    {
+        if (!SceneManager.GetSceneByName("GameScene").isLoaded ||
+            gameState != GameState.Playing || textStorySession?.CurrentPage == null)
+        {
+            errorMessage = "当前进度暂时无法保存";
+            return false;
+        }
+
+        try
+        {
+            var progress = new TextStoryProgressState
+            {
+                version = TextStorySaveVersion,
+                gameId = gameDefinition.gameId,
+                pageId = textStorySession.CurrentPage.id
+            };
+            SaveManager.SaveOrReplace(new SaveProfile<TextStoryProgressState>(
+                gameDefinition.SaveProfileName,
+                progress));
+            errorMessage = string.Empty;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception);
+            errorMessage = "存档失败，游戏没有退出";
+            return false;
+        }
+    }
+
     private void DeleteSavedGame()
     {
         var nodeIdsToDelete = new HashSet<string>();
         foreach (SaveProfile<GameProgressState> saveProfile in
-                 SaveManager.LoadCandidates<GameProgressState>(ProgressProfileName))
+                 SaveManager.LoadCandidates<GameProgressState>(ActiveProgressProfileName))
         {
             GameProgressState progress = saveProfile.saveData;
             if (progress.nodeIdsInGraph == null)
@@ -506,7 +725,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         {
             SaveManager.Delete(nodeId);
         }
-        SaveManager.Delete(ProgressProfileName);
+        SaveManager.Delete(ActiveProgressProfileName);
     }
 
     private static void DeleteGenerationNodeProfiles(GameProgressState progress)
@@ -602,6 +821,23 @@ public class GameManager : SingletonMonobehaviour<GameManager>
             case GameState.Start:
                 break;
             case GameState.Generating:
+                if (IsTextStoryMode)
+                {
+                    if (textStorySession == null)
+                    {
+                        textStorySession = new TextAdventureSession(gameDefinition);
+                        if (!textStorySession.Start(out string errorMessage))
+                        {
+                            Debug.LogError(errorMessage);
+                            break;
+                        }
+                    }
+
+                    gameState = GameState.Playing;
+                    FactoryEscapeAccessibility.RefreshScreen("story-description");
+                    break;
+                }
+
                 if (NodeMapBuilder.Instance == null) return;
 
                 GetGenerateNodeMap();
@@ -675,7 +911,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         }
 
         // 初始化天空UI(针对最后一个关卡)
-        if (levelIndex == 8)
+        if (levelIndex == SkyUiLevelIndex)
         {
             UIManager.Instance.SkyUI.gameObject.SetActive(true);
         }
@@ -935,7 +1171,10 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         canvasGroup.blocksRaycasts = true;
         yield return StartCoroutine(Fade(0,1,0.8f,Color.black));
 
-        NodeMapBuilder.Instance.SaveNodeMap(nodeIdsInGraph[graphIndex]);
+        if (!IsTextStoryMode)
+        {
+            NodeMapBuilder.Instance.SaveNodeMap(nodeIdsInGraph[graphIndex]);
+        }
 
         AsyncOperation unloadOperation = SceneManager.UnloadSceneAsync("GameScene");
         AsyncOperation loadOperation = SceneManager.LoadSceneAsync("PauseMenu",LoadSceneMode.Additive);
@@ -992,8 +1231,16 @@ public class GameManager : SingletonMonobehaviour<GameManager>
             soundManager.Instance.StopMusicInFade();
             soundManager.Instance.PlaySFX("ChangeScene");
 
-            LoadNodeGraph();
-            PlayCurrentLevelAudio();
+            if (IsTextStoryMode)
+            {
+                gameState = GameState.Playing;
+                FactoryEscapeAccessibility.RefreshScreen("story-description");
+            }
+            else
+            {
+                LoadNodeGraph();
+                PlayCurrentLevelAudio();
+            }
 
             canvasGroup.blocksRaycasts = false;
             yield return StartCoroutine(Fade(1,0,0.8f,Color.black));
@@ -1029,7 +1276,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
             tongyi_AI.instance.changeRobot(currentNodeLevel.chapterBot);
         }
         previousChapterBot = currentNodeLevel.chapterBot;
-        UIManager.Instance.SkyUI.gameObject.SetActive(levelIndex == 8);
+        UIManager.Instance.SkyUI.gameObject.SetActive(levelIndex == SkyUiLevelIndex);
 
         NodeMapBuilder.Instance.GenerateNodeMap(
             currentNodeLevel.levelGraphs[graphIndex],

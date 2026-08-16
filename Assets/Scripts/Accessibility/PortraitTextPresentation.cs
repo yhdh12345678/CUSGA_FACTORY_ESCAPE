@@ -30,7 +30,10 @@ public sealed class PortraitTextPresentation : MonoBehaviour
     private readonly Vector3[] corners = new Vector3[4];
     private RectTransform safeRoot;
     private RectTransform content;
+    private Image artworkBackground;
     private Image artwork;
+    private Image titleBackground;
+    private Image contentPanel;
     private TMP_Text title;
     private ScrollRect scroll;
     private TMP_FontAsset font;
@@ -43,8 +46,7 @@ public sealed class PortraitTextPresentation : MonoBehaviour
 
     private void Awake()
     {
-        font = Resources.Load<TMP_FontAsset>(
-            "Front/ChineseSubset/FactoryEscapeChineseReadable SDF");
+        font = SystemChineseFontProvider.CurrentFont;
         if (font != null && font.material != null)
         {
             presentationFontMaterial = new Material(font.material)
@@ -84,8 +86,7 @@ public sealed class PortraitTextPresentation : MonoBehaviour
         {
             title.text = resolvedTitle;
         }
-        artwork.sprite = currentArtwork;
-        artwork.enabled = currentArtwork != null;
+        SetArtwork(currentArtwork);
 
         for (int index = content.childCount - 1; index >= 0; index--)
         {
@@ -139,6 +140,17 @@ public sealed class PortraitTextPresentation : MonoBehaviour
     {
         artwork.sprite = currentArtwork;
         artwork.enabled = currentArtwork != null;
+        artworkBackground.gameObject.SetActive(currentArtwork != null);
+        if (currentArtwork == null)
+        {
+            SetAnchors(titleBackground.rectTransform, new Vector2(0f, 0.92f), Vector2.one);
+            SetAnchors(contentPanel.rectTransform, Vector2.zero, new Vector2(1f, 0.92f));
+        }
+        else
+        {
+            SetAnchors(titleBackground.rectTransform, new Vector2(0f, 0.67f), new Vector2(1f, 0.735f));
+            SetAnchors(contentPanel.rectTransform, Vector2.zero, new Vector2(1f, 0.67f));
+        }
     }
 
     public bool TryGetScreenFrame(string key, out Rect frame)
@@ -187,24 +199,24 @@ public sealed class PortraitTextPresentation : MonoBehaviour
         safeRoot = CreateRect("SafeArea", canvasRect);
         ApplySafeArea();
 
-        Image artBackground = CreateImage("ArtworkBackground", safeRoot, new Color32(3, 8, 10, 255));
-        SetAnchors(artBackground.rectTransform, new Vector2(0f, 0.67f), Vector2.one);
+        artworkBackground = CreateImage("ArtworkBackground", safeRoot, new Color32(3, 8, 10, 255));
+        SetAnchors(artworkBackground.rectTransform, new Vector2(0f, 0.67f), Vector2.one);
 
-        artwork = CreateImage("Artwork", artBackground.rectTransform, Color.white);
+        artwork = CreateImage("Artwork", artworkBackground.rectTransform, Color.white);
         artwork.preserveAspect = true;
         artwork.raycastTarget = false;
         Stretch(artwork.rectTransform, 24f);
 
-        Image titleBackground = CreateImage("TitleBackground", safeRoot, new Color32(5, 17, 20, 238));
+        titleBackground = CreateImage("TitleBackground", safeRoot, new Color32(5, 17, 20, 238));
         SetAnchors(titleBackground.rectTransform, new Vector2(0f, 0.67f), new Vector2(1f, 0.735f));
         title = CreateText("Title", titleBackground.rectTransform, 48f, TextAlignmentOptions.Center);
         title.fontStyle = FontStyles.Bold;
         Stretch(title.rectTransform, 20f);
 
-        Image panel = CreateImage("ContentPanel", safeRoot, new Color32(7, 18, 22, 252));
-        SetAnchors(panel.rectTransform, Vector2.zero, new Vector2(1f, 0.67f));
+        contentPanel = CreateImage("ContentPanel", safeRoot, new Color32(7, 18, 22, 252));
+        SetAnchors(contentPanel.rectTransform, Vector2.zero, new Vector2(1f, 0.67f));
 
-        RectTransform viewport = CreateRect("Viewport", panel.rectTransform);
+        RectTransform viewport = CreateRect("Viewport", contentPanel.rectTransform);
         Stretch(viewport, 28f);
         viewport.gameObject.AddComponent<RectMask2D>();
 
@@ -227,7 +239,7 @@ public sealed class PortraitTextPresentation : MonoBehaviour
         ContentSizeFitter fitter = content.gameObject.AddComponent<ContentSizeFitter>();
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-        scroll = panel.gameObject.AddComponent<ScrollRect>();
+        scroll = contentPanel.gameObject.AddComponent<ScrollRect>();
         scroll.viewport = viewport;
         scroll.content = content;
         scroll.horizontal = false;

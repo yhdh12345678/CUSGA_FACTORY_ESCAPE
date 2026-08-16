@@ -17,37 +17,32 @@ using TMPro;
 public sealed class AccessibilitySmokeTests
 {
     [Test]
-    public void ReadableChineseFontKeepsQualityContrastAndGb2312Fallback()
+    public void SystemChineseFontUsesDynamicAtlasAndEmbeddedFallback()
     {
-        TMP_FontAsset font = Resources.Load<TMP_FontAsset>(
-            "Front/ChineseSubset/FactoryEscapeChineseReadable SDF");
-        Assert.That(font, Is.Not.Null, "必须打入高清中文主字体。");
+        TMP_FontAsset font = GetSystemChineseFont();
+        Assert.That(font, Is.Not.Null, "必须能创建系统中文字体或动态中文后备字体。");
         Assert.That(font.faceInfo.pointSize, Is.GreaterThanOrEqualTo(90));
         Assert.That(font.atlasPadding, Is.GreaterThanOrEqualTo(9));
-        Assert.That(font.atlasRenderMode, Is.EqualTo(GlyphRenderMode.SDF32));
+        Assert.That(font.atlasPopulationMode, Is.Not.EqualTo(AtlasPopulationMode.Static),
+            "不得再次把大型静态中文图集打入 APK。");
         Assert.That(font.material.shader.name, Is.EqualTo("TextMeshPro/Mobile/Distance Field"),
-            "Android 中文字体必须使用已在真机验证可绘制完整字形的移动端 SDF 材质。");
+            "Android 中文字体必须使用移动端 SDF 材质。");
         Assert.That(
             font.material.GetFloat(ShaderUtilities.ID_OutlineWidth),
             Is.GreaterThanOrEqualTo(0.1f),
             "浅色正文必须有稳定的深色描边以保证复杂背景上的局部对比度。");
 
-        string requiredCharacters = File.ReadAllText(Path.Combine(
-            Application.dataPath,
-            "Editor",
-            "FontOptimization",
-            "FactoryEscapeRequiredCharacterSet.txt"));
-        Assert.That(font.HasCharacters(requiredCharacters, out List<char> missing), Is.True,
-            $"高清主字体缺少 {missing?.Count ?? 0} 个项目字符。");
-        Assert.That(font.fallbackFontAssetTable, Has.Count.EqualTo(1));
-        Assert.That(
-            font.fallbackFontAssetTable[0].material.shader.name,
-            Is.EqualTo("TextMeshPro/Mobile/Distance Field"),
-            "动态中文后备字体必须与主字体使用相同的 Android 兼容材质。");
-        Assert.That(
-            font.fallbackFontAssetTable[0].atlasPopulationMode,
-            Is.EqualTo(AtlasPopulationMode.Dynamic),
-            "GB2312 后备字体应按需生成，不能再次挤入低精度静态主图集。");
+        TMP_FontAsset fallback = Resources.Load<TMP_FontAsset>(
+            "Front/ChineseSubset/FactoryEscapeChineseFallback SDF");
+        Assert.That(fallback, Is.Not.Null, "必须保留最小动态中文后备字体。");
+        Assert.That(fallback.atlasPopulationMode, Is.EqualTo(AtlasPopulationMode.Dynamic));
+        Assert.That(fallback.sourceFontFile, Is.Not.Null);
+        Assert.That(font.HasCharacters("抓住未尽的余晖小明车间继续游戏存档退出"), Is.True,
+            "当前字体链必须保留已经生成的关键中文字符。");
+        Assert.That(fallback.sourceFontFile.HasCharacter('接'), Is.True,
+            "动态后备字体源必须覆盖项目中文字符。");
+        Assert.That(fallback.sourceFontFile.HasCharacter('口'), Is.True,
+            "动态后备字体源必须覆盖项目中文字符。");
     }
 
     [Test]
@@ -105,9 +100,9 @@ public sealed class AccessibilitySmokeTests
         for (int frame = 0; frame < 120; frame++)
         {
             Transform currentRoot = (Transform)rootProperty.GetValue(presentation);
-            bool mainMenuReady = (int)entryCountProperty.GetValue(presentation) == 4 &&
+            bool mainMenuReady = (int)entryCountProperty.GetValue(presentation) == 3 &&
                                  currentRoot.GetComponentsInChildren<TMP_Text>(false)
-                                     .Any(text => text.text == "开始游戏");
+                                     .Any(text => text.text == "抓住未尽的余晖");
             if (mainMenuReady)
             {
                 break;
@@ -121,16 +116,27 @@ public sealed class AccessibilitySmokeTests
         StringAssert.Contains("new Vector2(1080f, 2400f)", presentationSource);
         Transform presentationRoot = (Transform)rootProperty.GetValue(presentation);
         TMP_Text[] texts = presentationRoot.GetComponentsInChildren<TMP_Text>(false);
-        Assert.That((int)entryCountProperty.GetValue(presentation), Is.EqualTo(4),
-            $"主菜单竖屏层应显示开始、继续、选项和退出四个动作。当前文字：{string.Join("|", texts.Select(text => text.text))}");
+        Assert.That((int)entryCountProperty.GetValue(presentation), Is.EqualTo(3),
+            $"游戏目录应显示子游戏、选项和退出应用。当前文字：{string.Join("|", texts.Select(text => text.text))}");
+        Assert.That(texts.Any(text => text.text == "选择游戏"), Is.True);
         Assert.That(texts.Any(text => text.text == "抓住未尽的余晖"), Is.True);
-        Assert.That(texts.Any(text => text.text == "开始游戏"), Is.True);
+        Assert.That(texts.Any(text => text.text == "退出应用"), Is.True);
         Assert.That(texts.All(text => text.fontSize >= 38f), Is.True,
             "竖屏可见文字不得小于 38。 ");
         Assert.That(texts.All(text => text.font != null), Is.True,
             "竖屏可见文字必须使用可渲染中文的 TMP 字体。 ");
         Assert.That(texts.All(text => text.fontSharedMaterial != text.font.material), Is.True,
             "竖屏文字必须使用独立材质，避免原界面动画把标题或正文改成透明。 ");
+
+        presentation.GetType().GetMethod("SetArtwork").Invoke(presentation, new object[] { null });
+        RectTransform artworkBackground = presentationRoot.Find(
+            "SafeArea/ArtworkBackground") as RectTransform;
+        RectTransform contentPanel = presentationRoot.Find(
+            "SafeArea/ContentPanel") as RectTransform;
+        Assert.That(artworkBackground.gameObject.activeSelf, Is.False,
+            "无图片剧情不得保留空白图片区域。 ");
+        Assert.That(contentPanel.anchorMax.y, Is.EqualTo(0.92f).Within(0.001f),
+            "无图片剧情的正文区域应扩展到标题下方。 ");
     }
 
     [UnityTest]
@@ -143,8 +149,7 @@ public sealed class AccessibilitySmokeTests
             yield return null;
         }
 
-        TMP_FontAsset font = Resources.Load<TMP_FontAsset>(
-            "Front/ChineseSubset/FactoryEscapeChineseReadable SDF");
+        TMP_FontAsset font = GetSystemChineseFont();
         TMP_Text[] visibleTexts = Resources.FindObjectsOfTypeAll<TMP_Text>()
             .Where(text => text.gameObject.scene.isLoaded && text.gameObject.activeInHierarchy &&
                            text.color.a > 0.001f)
@@ -191,10 +196,58 @@ public sealed class AccessibilitySmokeTests
         string source = File.ReadAllText(Path.Combine(
             Application.dataPath, "Scripts", "Accessibility", "FactoryEscapeAccessibility.cs"));
         StringAssert.Contains("bool resultReady = aiResult != null || level1Result != null", source);
-        StringAssert.Contains("if (!resultReady)", source);
-        StringAssert.Contains("if (resultReady && ai != null && button == ai.send_button)", source);
+        StringAssert.Contains("if (!resultReady && ai != null && dialogSystem.textFinished)", source);
+        StringAssert.Contains("if (ai != null && button == ai.send_button)", source);
         StringAssert.Contains("AddAction(items, \"ai-result-continue\", \"继续剧情\"", source);
         StringAssert.Contains("QueueRefresh();", source);
+    }
+
+    [Test]
+    public void NodeActionsExposeExplicitResultsAndFailureDirection()
+    {
+        Type accessibilityType = Type.GetType("FactoryEscapeAccessibility, Assembly-CSharp");
+        MethodInfo buildResult = accessibilityType?.GetMethod(
+            "BuildNodeActionResult", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.That(buildResult, Is.Not.Null);
+
+        Assert.That(buildResult.Invoke(null, new object[]
+        {
+            "按下可以启动传送带", string.Empty, new List<string> { "撬棍" }
+        }), Is.EqualTo("传送带已启动，发现撬棍。"));
+        Assert.That(buildResult.Invoke(null, new object[]
+        {
+            "应急操作面板", "螺丝刀", new List<string> { "传送带开启按钮" }
+        }), Is.EqualTo("已使用螺丝刀，发现传送带开启按钮。"));
+
+        string source = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Scripts", "Accessibility", "FactoryEscapeAccessibility.cs"));
+        StringAssert.Contains("破解未成功。机房和主管办公室已解锁，请前往新区域继续调查。", source);
+        StringAssert.Contains("AddStaticText(items, \"node-action-result\", nodeActionResult);", source);
+        StringAssert.Contains("SendAnnouncement(pendingAnnouncement)", source,
+            "操作结果必须主动通知读屏，同时保留可见文字。 ");
+    }
+
+    [Test]
+    public void NodeScopeProvidesReturnAndRestoresTheRoomFocus()
+    {
+        string source = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Scripts", "Accessibility", "FactoryEscapeAccessibility.cs"));
+        StringAssert.Contains("activeGameNodes.Where(node => node != scopeRoot)", source,
+            "房间范围必须包含当前节点图中已经显现的多级和独立线索节点。");
+        StringAssert.Contains("AddAction(items, \"node-overview-back\", \"返回节点总览\"", source);
+        StringAssert.Contains("nodeScopeRootId = string.Empty;", source);
+        StringAssert.Contains("$\"node-{rootNode.GetInstanceID()}\"", source,
+            "返回总览后必须把焦点恢复到刚退出的房间。 ");
+    }
+
+    [Test]
+    public void AISubmitButtonHasChineseVisibleTextAndObjectName()
+    {
+        string prefab = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Prefabs", "UI", "AIDialogPanel.prefab"));
+        StringAssert.DoesNotContain("m_Name: Button (Legacy)", prefab);
+        StringAssert.Contains("m_Name: 提交", prefab);
+        StringAssert.Contains("m_Text: \"\\u63D0\\u4EA4\"", prefab);
     }
 
     [Test]
@@ -208,6 +261,56 @@ public sealed class AccessibilitySmokeTests
             accessibilitySource);
         StringAssert.DoesNotContain("!string.IsNullOrWhiteSpace(chat_input_field.text)",
             aiSource.Substring(aiSource.IndexOf("public bool CanSend", StringComparison.Ordinal), 150));
+    }
+
+    [Test]
+    public void AIDialogUsesThreeOfflineChoicesWithoutTextEntry()
+    {
+        string accessibilitySource = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Scripts", "Accessibility", "FactoryEscapeAccessibility.cs"));
+        int aiSectionStart = accessibilitySource.IndexOf(
+            "if (dialogSystem != null && dialogSystem.AIDialogPanel.gameObject.activeInHierarchy)",
+            StringComparison.Ordinal);
+        int aiSectionEnd = accessibilitySource.IndexOf(
+            "if (uiManager != null && uiManager.textNodeUI", aiSectionStart,
+            StringComparison.Ordinal);
+        string aiSection = accessibilitySource.Substring(
+            aiSectionStart, aiSectionEnd - aiSectionStart);
+        StringAssert.Contains("if (!resultReady && ai != null && dialogSystem.textFinished)", aiSection);
+        StringAssert.Contains("请选择一句话安抚823。", aiSection);
+        StringAssert.Contains("你已经做得很好了，我会陪着你。", aiSection);
+        StringAssert.Contains("先慢慢来，我们换个角度继续。", aiSection);
+        StringAssert.Contains("现在没时间焦虑，快点破解。", aiSection);
+        StringAssert.Contains("SubmitPresetResponse", aiSection);
+        StringAssert.DoesNotContain("GetComponentsInChildren<InputField>", aiSection,
+            "823 对话页不得再暴露自由输入焦点。");
+
+        string aiSource = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Scripts", "NodeComponent", "AI", "tongyi_AI.cs"));
+        int presetStart = aiSource.IndexOf(
+            "public bool SubmitPresetResponse", StringComparison.Ordinal);
+        Assert.That(presetStart, Is.GreaterThanOrEqualTo(0));
+        int presetEnd = aiSource.IndexOf("\n    public ", presetStart + 1,
+            StringComparison.Ordinal);
+        string presetMethod = aiSource.Substring(presetStart, presetEnd - presetStart);
+        StringAssert.Contains("StaticEventHandler.CallCommit", presetMethod);
+        StringAssert.DoesNotContain("PostMessage", presetMethod,
+            "固定选项必须完全离线，不得尝试联网后再回退。");
+
+        string[] aiGraphs = Directory.GetFiles(
+            Path.Combine(Application.dataPath, "ScriptableObjectAssets", "NodeGraph"),
+            "*.asset")
+            .Where(path => File.ReadAllText(path).Contains("submissionTimes:"))
+            .ToArray();
+        Assert.That(aiGraphs, Is.Not.Empty);
+        foreach (string graph in aiGraphs)
+        {
+            string[] submissionLines = File.ReadAllLines(graph)
+                .Where(line => line.TrimStart().StartsWith("submissionTimes:",
+                    StringComparison.Ordinal)).ToArray();
+            Assert.That(submissionLines.All(line => line.Trim() == "submissionTimes: 3"), Is.True,
+                $"{Path.GetFileName(graph)} 的 823 对话必须统一为三轮。");
+        }
     }
 
     [Test]
@@ -549,19 +652,28 @@ public sealed class AccessibilitySmokeTests
     }
 
     [UnityTest]
-    public IEnumerator MainMenuExposesOnlyFlatAccessibleActions()
+    public IEnumerator MainMenuExposesCatalogThenSelectedGameActions()
     {
         AssistiveSupport.screenReaderStatusOverride =
             AssistiveSupport.ScreenReaderStatusOverride.ForceEnabled;
         DestroyExistingGameManager();
         SceneManager.LoadScene("LoadScene");
 
+        for (int frame = 0; frame < 120 &&
+             !SceneManager.GetSceneByName("MainMenu").isLoaded; frame++)
+        {
+            yield return null;
+        }
+        Type.GetType("FactoryEscapeAccessibility, Assembly-CSharp")?
+            .GetMethod("RefreshScreen", BindingFlags.Static | BindingFlags.Public)?
+            .Invoke(null, new object[] { string.Empty });
+
         for (int frame = 0; frame < 120; frame++)
         {
             AccessibilityHierarchy current = AssistiveSupport.activeHierarchy;
             if (current != null &&
                 current.rootNodes.Select(node => node.label).SequenceEqual(
-                    new[] { "开始游戏", "继续游戏", "选项", "退出游戏" }))
+                    new[] { "抓住未尽的余晖", "选项", "退出应用" }))
             {
                 break;
             }
@@ -573,8 +685,8 @@ public sealed class AccessibilitySmokeTests
         Assert.That(hierarchy, Is.Not.Null, "启用读屏后应创建无障碍层级。");
         Assert.That(
             hierarchy.rootNodes.Select(node => node.label),
-            Is.EqualTo(new[] { "开始游戏", "继续游戏", "选项", "退出游戏" }),
-            "主菜单应只暴露四个可直接激活的菜单项。");
+            Is.EqualTo(new[] { "抓住未尽的余晖", "选项", "退出应用" }),
+            "入口应先暴露子游戏目录，再进入具体游戏的开始和继续操作。");
         Assert.That(
             hierarchy.rootNodes.All(node => node.role == AccessibilityRole.Button),
             Is.True,
@@ -623,12 +735,25 @@ public sealed class AccessibilitySmokeTests
 
         Assert.That(
             AssistiveSupport.activeHierarchy.rootNodes.Select(node => node.label),
-            Is.EqualTo(new[] { "音乐音量", "音效音量", "返回主菜单" }),
+            Is.EqualTo(new[] { "音乐音量", "音效音量", "返回游戏列表" }),
             "激活选项后应进入可滑动操作的选项菜单。");
 
         AccessibilityNode backNode = AssistiveSupport.activeHierarchy.rootNodes
-            .Single(node => node.label == "返回主菜单");
+            .Single(node => node.label == "返回游戏列表");
         Assert.That(((Func<bool>)invokedField.GetValue(backNode)).Invoke(), Is.True);
+        for (int frame = 0; frame < 30; frame++)
+        {
+            if (AssistiveSupport.activeHierarchy.rootNodes.Any(node => node.label == "抓住未尽的余晖"))
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        AccessibilityNode gameNode = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "抓住未尽的余晖");
+        Assert.That(((Func<bool>)invokedField.GetValue(gameNode)).Invoke(), Is.True);
         for (int frame = 0; frame < 30; frame++)
         {
             if (AssistiveSupport.activeHierarchy.rootNodes.Any(node => node.label == "开始游戏"))
@@ -638,6 +763,11 @@ public sealed class AccessibilitySmokeTests
 
             yield return null;
         }
+
+        Assert.That(
+            AssistiveSupport.activeHierarchy.rootNodes.Select(node => node.label),
+            Is.EqualTo(new[] { "开始游戏", "继续游戏", "返回游戏列表" }),
+            "选择子游戏后才应显示该游戏的开始、继续和返回操作。");
 
         AccessibilityNode startNode = AssistiveSupport.activeHierarchy.rootNodes
             .Single(node => node.label == "开始游戏");
@@ -807,8 +937,7 @@ public sealed class AccessibilitySmokeTests
             "QueueRefresh", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(
             accessibility, null);
 
-        string dialogDescription =
-            "画面描述：人物对话画面，小明、823参与交谈，当前说话者的立绘高亮。";
+        string dialogDescription = "画面描述：人物对话画面，小明、823参与交谈。";
         for (int frame = 0; frame < 30; frame++)
         {
             if (AssistiveSupport.activeHierarchy.rootNodes.Any(node => node.label == dialogDescription))
@@ -832,6 +961,366 @@ public sealed class AccessibilitySmokeTests
             "激活对话页末继续后应一次结束整组对话。");
     }
 
+    [UnityTest]
+    public IEnumerator SecondaryWorkshopRoomsExposeInvestigationFocusOnArrival()
+    {
+        AssistiveSupport.screenReaderStatusOverride =
+            AssistiveSupport.ScreenReaderStatusOverride.ForceEnabled;
+        DestroyExistingGameManager();
+        SceneManager.LoadScene("LoadScene");
+
+        object gameManager = null;
+        object gameMenu = null;
+        for (int frame = 0; frame < 180; frame++)
+        {
+            gameManager = FindGameComponent("GameManager");
+            gameMenu = FindGameComponent("GameMenu");
+            if (gameManager != null && gameMenu != null)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        gameMenu.GetType().GetMethod("StartGame").Invoke(gameMenu, null);
+        object builder = null;
+        float timeout = Time.realtimeSinceStartup + 8f;
+        while (Time.realtimeSinceStartup < timeout)
+        {
+            builder = FindGameComponent("NodeMapBuilder");
+            bool mapReady = builder != null &&
+                            ((System.Collections.IDictionary)builder.GetType()
+                                .GetField("nodeHasCreated").GetValue(builder)).Count > 0;
+            if (SceneManager.GetSceneByName("GameScene").isLoaded && mapReady &&
+                gameManager.GetType().GetField("gameState").GetValue(gameManager)
+                    .ToString() == "Playing")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        Assert.That(builder, Is.Not.Null);
+        object uiManager = FindGameComponent("UIManager");
+        object videoManager = FindGameComponent("VideoManager");
+        object dialogSystem = FindGameComponent("DialogSystem");
+        object accessibility = FindGameComponent("FactoryEscapeAccessibility");
+        ((Transform)videoManager.GetType().GetField("cutSceneUIPanel").GetValue(videoManager))
+            .gameObject.SetActive(false);
+        ((GameObject)dialogSystem.GetType().GetField("dialogPanel").GetValue(dialogSystem))
+            .SetActive(false);
+        ((Transform)dialogSystem.GetType().GetField("AIDialogPanel").GetValue(dialogSystem))
+            .gameObject.SetActive(false);
+        uiManager.GetType().GetField("UIShow").SetValue(uiManager, false);
+
+        Type managerType = gameManager.GetType();
+        IList levels = (IList)managerType.GetField("nodeLevelSOs").GetValue(gameManager);
+        object workshopLevel = levels[1];
+        managerType.GetField("levelIndex").SetValue(gameManager, 1);
+        managerType.GetMethod("InitializeReference",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            .Invoke(gameManager, new[] { workshopLevel });
+        IList graphs = (IList)workshopLevel.GetType().GetField("levelGraphs")
+            .GetValue(workshopLevel);
+
+        string[][] expectedRoomFocus =
+        {
+            new[] { "机房", "可以旋转的白板", "管理员工作台", "服务器机房", "锁上的门" },
+            new[] { "主管办公室", "茶几", "沙发旁的柜子", "主管工位" }
+        };
+
+        for (int graphIndex = 1; graphIndex <= 2; graphIndex++)
+        {
+            builder.GetType().GetMethod("DeleteNodeMap").Invoke(builder, null);
+            builder.GetType().GetMethod("GenerateNodeMap").Invoke(
+                builder, new[] { graphs[graphIndex], (object)0 });
+            for (int frame = 0; frame < 5; frame++)
+            {
+                yield return null;
+            }
+
+            accessibility.GetType().GetMethod(
+                    "QueueRefresh", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(accessibility, null);
+            for (int frame = 0; frame < 30; frame++)
+            {
+                string[] labels = AssistiveSupport.activeHierarchy.rootNodes
+                    .Select(node => node.label).ToArray();
+                if (expectedRoomFocus[graphIndex - 1].All(labels.Contains))
+                {
+                    break;
+                }
+
+                yield return null;
+            }
+
+            string[] actualLabels = AssistiveSupport.activeHierarchy.rootNodes
+                .Select(node => node.label).ToArray();
+            Assert.That(expectedRoomFocus[graphIndex - 1].All(actualLabels.Contains), Is.True,
+                $"进入{expectedRoomFocus[graphIndex - 1][0]}后应直接出现首批调查焦点。实际焦点：{string.Join("、", actualLabels)}");
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator EveryReachableItemInLaterLevelsReceivesAccessibilityFocus()
+    {
+        AssistiveSupport.screenReaderStatusOverride =
+            AssistiveSupport.ScreenReaderStatusOverride.ForceEnabled;
+        DestroyExistingGameManager();
+        SceneManager.LoadScene("LoadScene");
+
+        object gameManager = null;
+        object gameMenu = null;
+        for (int frame = 0; frame < 180; frame++)
+        {
+            gameManager = FindGameComponent("GameManager");
+            gameMenu = FindGameComponent("GameMenu");
+            if (gameManager != null && gameMenu != null)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        gameMenu.GetType().GetMethod("StartGame").Invoke(gameMenu, null);
+        object builder = null;
+        float timeout = Time.realtimeSinceStartup + 8f;
+        while (Time.realtimeSinceStartup < timeout)
+        {
+            builder = FindGameComponent("NodeMapBuilder");
+            bool mapReady = builder != null &&
+                            ((System.Collections.IDictionary)builder.GetType()
+                                .GetField("nodeHasCreated").GetValue(builder)).Count > 0;
+            if (SceneManager.GetSceneByName("GameScene").isLoaded && mapReady &&
+                gameManager.GetType().GetField("gameState").GetValue(gameManager)
+                    .ToString() == "Playing")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        object uiManager = FindGameComponent("UIManager");
+        object videoManager = FindGameComponent("VideoManager");
+        object dialogSystem = FindGameComponent("DialogSystem");
+        object accessibility = FindGameComponent("FactoryEscapeAccessibility");
+        Type managerType = gameManager.GetType();
+        Type accessibilityType = accessibility.GetType();
+        MethodInfo getNodeLabel = accessibilityType.GetMethod(
+            "GetNodeLabel", BindingFlags.Static | BindingFlags.NonPublic);
+        MethodInfo enterNodeScope = accessibilityType.GetMethod(
+            "EnterNodeScope", BindingFlags.Static | BindingFlags.Public);
+        IList levels = (IList)managerType.GetField("nodeLevelSOs").GetValue(gameManager);
+
+        for (int levelIndex = 1; levelIndex < levels.Count; levelIndex++)
+        {
+            object level = levels[levelIndex];
+            managerType.GetField("levelIndex").SetValue(gameManager, levelIndex);
+            managerType.GetMethod("InitializeReference",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(gameManager, new[] { level });
+            IList graphs = (IList)level.GetType().GetField("levelGraphs").GetValue(level);
+
+            for (int graphIndex = 0; graphIndex < graphs.Count; graphIndex++)
+            {
+                builder.GetType().GetMethod("DeleteNodeMap").Invoke(builder, null);
+                yield return null;
+                builder.GetType().GetMethod("GenerateNodeMap").Invoke(
+                    builder, new[] { graphs[graphIndex], (object)1 });
+                yield return null;
+                yield return null;
+
+                ((Transform)videoManager.GetType().GetField("cutSceneUIPanel")
+                    .GetValue(videoManager)).gameObject.SetActive(false);
+                ((GameObject)dialogSystem.GetType().GetField("dialogPanel")
+                    .GetValue(dialogSystem)).SetActive(false);
+                ((Transform)dialogSystem.GetType().GetField("AIDialogPanel")
+                    .GetValue(dialogSystem)).gameObject.SetActive(false);
+                uiManager.GetType().GetField("UIShow").SetValue(uiManager, false);
+
+                var nodes = ((System.Collections.IDictionary)builder.GetType()
+                        .GetField("nodeHasCreated").GetValue(builder)).Values
+                    .OfType<Component>().ToArray();
+                Component entrance = null;
+                foreach (Component node in nodes)
+                {
+                    node.gameObject.SetActive(true);
+                    object nodeType = node.GetType().GetField("nodeType").GetValue(node);
+                    if ((bool)nodeType.GetType().GetField("isEntrance").GetValue(nodeType))
+                    {
+                        entrance = node;
+                    }
+                }
+
+                Assert.That(entrance, Is.Not.Null,
+                    $"后续关卡 {levelIndex} 的节点图 {graphIndex} 必须有入口节点。");
+                enterNodeScope.Invoke(null, new object[] { entrance });
+                accessibilityType.GetMethod(
+                        "QueueRefresh", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(accessibility, null);
+                yield return null;
+                yield return null;
+
+                string[] actualLabels = AssistiveSupport.activeHierarchy.rootNodes
+                    .Select(node => node.label).ToArray();
+                string graphName = graphs[graphIndex].GetType().GetField("graphName")
+                    .GetValue(graphs[graphIndex]) as string;
+                foreach (IGrouping<string, Component> expectedGroup in nodes
+                             .Where(node => node != entrance)
+                             .Where(node =>
+                             {
+                                 object nodeType = node.GetType().GetField("nodeType").GetValue(node);
+                                 return !(bool)nodeType.GetType().GetField("isExit").GetValue(nodeType);
+                             })
+                             .GroupBy(node => (string)getNodeLabel.Invoke(null, new object[] { node })))
+                {
+                    int actualCount = actualLabels.Count(label => label == expectedGroup.Key);
+                    Assert.That(actualCount, Is.GreaterThanOrEqualTo(expectedGroup.Count()),
+                        $"{graphName} 中的“{expectedGroup.Key}”应有 {expectedGroup.Count()} 个焦点，实际 {actualCount} 个。");
+                }
+            }
+        }
+
+        builder.GetType().GetMethod("DeleteNodeMap").Invoke(builder, null);
+        if (SceneManager.GetSceneByName("GameScene").isLoaded)
+        {
+            yield return SceneManager.UnloadSceneAsync("GameScene");
+        }
+    }
+
+    [Test]
+    public void TextStoryModelSupportsOptionalArtworkLinearPagesAndChoices()
+    {
+        Type gameType = Type.GetType("TextAdventureGameSO, Assembly-CSharp");
+        Type storyType = Type.GetType("TextAdventureStory, Assembly-CSharp");
+        Type chapterType = Type.GetType("TextAdventureChapter, Assembly-CSharp");
+        Type pageType = Type.GetType("TextAdventurePage, Assembly-CSharp");
+        Type lineType = Type.GetType("TextAdventureLine, Assembly-CSharp");
+        Type choiceType = Type.GetType("TextAdventureChoice, Assembly-CSharp");
+        Type validatorType = Type.GetType("TextAdventureGameValidator, Assembly-CSharp");
+        Type sessionType = Type.GetType("TextAdventureSession, Assembly-CSharp");
+        Type catalogType = Type.GetType("TextAdventureCatalogSO, Assembly-CSharp");
+        Type catalogValidatorType = Type.GetType("TextAdventureCatalogValidator, Assembly-CSharp");
+        Assert.That(new[] { gameType, storyType, chapterType, pageType, lineType,
+            choiceType, validatorType, sessionType, catalogType, catalogValidatorType }
+            .All(type => type != null), Is.True);
+
+        var game = ScriptableObject.CreateInstance(gameType);
+        ScriptableObject secondGame = null;
+        ScriptableObject catalog = null;
+        try
+        {
+            gameType.GetField("schemaVersion").SetValue(game, 1);
+            gameType.GetField("gameId").SetValue(game, "template-test");
+            gameType.GetField("displayName").SetValue(game, "模板测试");
+            gameType.GetField("protagonistName").SetValue(game, "测试者");
+            gameType.GetField("mode").SetValue(game,
+                Enum.Parse(gameType.GetField("mode").FieldType, "TextStory"));
+
+            object story = Activator.CreateInstance(storyType);
+            storyType.GetField("firstPageId").SetValue(story, "intro");
+            IList chapters = (IList)Activator.CreateInstance(
+                storyType.GetField("chapters").FieldType);
+            object chapter = Activator.CreateInstance(chapterType);
+            chapterType.GetField("id").SetValue(chapter, "chapter1");
+            chapterType.GetField("title").SetValue(chapter, "第一章");
+            chapters.Add(chapter);
+            storyType.GetField("chapters").SetValue(story, chapters);
+
+            IList pages = (IList)Activator.CreateInstance(storyType.GetField("pages").FieldType);
+            object intro = CreateTextStoryPage(pageType, lineType,
+                "intro", "开场", "没有图片的文字场景。", "choice");
+            object choicePage = CreateTextStoryPage(pageType, lineType,
+                "choice", "选择", "主角需要做出决定。", string.Empty);
+            IList choices = (IList)pageType.GetField("choices").GetValue(choicePage);
+            object choice = Activator.CreateInstance(choiceType);
+            choiceType.GetField("id").SetValue(choice, "go");
+            choiceType.GetField("label").SetValue(choice, "继续前进");
+            choiceType.GetField("nextPageId").SetValue(choice, "ending");
+            choices.Add(choice);
+            object ending = CreateTextStoryPage(pageType, lineType,
+                "ending", "结局", "道路尽头亮起一盏灯。", string.Empty);
+            pages.Add(intro);
+            pages.Add(choicePage);
+            pages.Add(ending);
+            storyType.GetField("pages").SetValue(story, pages);
+            gameType.GetField("story").SetValue(game, story);
+
+            IList errors = (IList)validatorType.GetMethod("Validate").Invoke(null, new object[] { game });
+            Assert.That(errors.Count, Is.EqualTo(0), string.Join("；", errors.Cast<string>()));
+            Assert.That(pageType.GetField("artwork").GetValue(intro), Is.Null,
+                "没有图片时仍应是有效剧情页。");
+
+            object session = Activator.CreateInstance(sessionType, new object[] { game });
+            object[] startArguments = { null };
+            Assert.That((bool)sessionType.GetMethod("Start").Invoke(session, startArguments), Is.True);
+            object[] continueArguments = { null };
+            Assert.That((bool)sessionType.GetMethod("Continue").Invoke(session, continueArguments), Is.True);
+            object[] choiceArguments = { "go", null };
+            Assert.That((bool)sessionType.GetMethod("Choose").Invoke(session, choiceArguments), Is.True);
+            object currentPage = sessionType.GetProperty("CurrentPage").GetValue(session);
+            Assert.That(pageType.GetField("id").GetValue(currentPage), Is.EqualTo("ending"));
+
+            secondGame = UnityEngine.Object.Instantiate(game);
+            gameType.GetField("gameId").SetValue(secondGame, "template-test-2");
+            gameType.GetField("displayName").SetValue(secondGame, "第二个子游戏");
+            catalog = ScriptableObject.CreateInstance(catalogType);
+            IList games = (IList)catalogType.GetField("games").GetValue(catalog);
+            games.Add(game);
+            games.Add(secondGame);
+            IList catalogErrors = (IList)catalogValidatorType.GetMethod("Validate")
+                .Invoke(null, new object[] { catalog });
+            Assert.That(catalogErrors.Count, Is.EqualTo(0),
+                string.Join("；", catalogErrors.Cast<string>()));
+            string firstSave = (string)gameType.GetProperty("SaveProfileName").GetValue(game);
+            string secondSave = (string)gameType.GetProperty("SaveProfileName").GetValue(secondGame);
+            Assert.That(firstSave, Is.Not.EqualTo(secondSave),
+                "同一 App 内的不同子游戏必须使用不同存档。");
+        }
+        finally
+        {
+            if (catalog != null)
+            {
+                UnityEngine.Object.DestroyImmediate(catalog);
+            }
+            if (secondGame != null)
+            {
+                UnityEngine.Object.DestroyImmediate(secondGame);
+            }
+            UnityEngine.Object.DestroyImmediate(game);
+        }
+    }
+
+    private static object CreateTextStoryPage(
+        Type pageType,
+        Type lineType,
+        string id,
+        string title,
+        string description,
+        string nextPageId)
+    {
+        object page = Activator.CreateInstance(pageType);
+        pageType.GetField("id").SetValue(page, id);
+        pageType.GetField("chapterId").SetValue(page, "chapter1");
+        pageType.GetField("title").SetValue(page, title);
+        pageType.GetField("visualDescription").SetValue(page, description);
+        pageType.GetField("nextPageId").SetValue(page, nextPageId);
+
+        IList lines = (IList)Activator.CreateInstance(pageType.GetField("lines").FieldType);
+        object line = Activator.CreateInstance(lineType);
+        lineType.GetField("speaker").SetValue(line, "旁白");
+        lineType.GetField("text").SetValue(line, "这是一段可以被看见和读出的文字。");
+        lines.Add(line);
+        pageType.GetField("lines").SetValue(page, lines);
+        pageType.GetField("choices").SetValue(page,
+            Activator.CreateInstance(pageType.GetField("choices").FieldType));
+        return page;
+    }
+
     private static object FindGameComponent(string typeName)
     {
         Type type = Type.GetType($"{typeName}, Assembly-CSharp");
@@ -839,6 +1328,17 @@ public sealed class AccessibilitySmokeTests
         return Resources.FindObjectsOfTypeAll(type)
             .OfType<Component>()
             .FirstOrDefault(component => component.gameObject.scene.isLoaded);
+    }
+
+    private static TMP_FontAsset GetSystemChineseFont()
+    {
+        Type providerType = Type.GetType("SystemChineseFontProvider, Assembly-CSharp");
+        Assert.That(providerType, Is.Not.Null, "未找到系统中文字体提供器。");
+        PropertyInfo fontProperty = providerType.GetProperty(
+            "CurrentFont",
+            BindingFlags.Public | BindingFlags.Static);
+        Assert.That(fontProperty, Is.Not.Null);
+        return fontProperty.GetValue(null) as TMP_FontAsset;
     }
 
     private static void DestroyExistingGameManager()

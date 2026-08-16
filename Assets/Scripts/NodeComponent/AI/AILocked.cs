@@ -171,7 +171,9 @@ public class AILocked : MonoBehaviour, IAccessibleNodeAction
     private void OpenAIDialog()
     {
         tongyi_AI.instance.SubmitTimer = submissionTimes;
-        tongyi_AI.instance.send_button.interactable = true;
+        tongyi_AI.instance.send_button.interactable = false;
+        tongyi_AI.instance.send_button.gameObject.SetActive(false);
+        tongyi_AI.instance.input_field.SetActive(false);
         DialogSystem.Instance.AICharacter_1.sprite =
             GameResources.Instance.characters.Find(x => x.name == "8DE").sprite;
         UIManager.Instance.UIShow = true;

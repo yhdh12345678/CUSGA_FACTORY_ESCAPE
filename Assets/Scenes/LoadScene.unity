@@ -163,6 +163,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c294515993014b244916a52f1f5664c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameCatalog: {fileID: 11400000, guid: 01ac87046fefd1f44992cf8611ead815, type: 2}
+  gameDefinition: {fileID: 11400000, guid: 77217dcf172733e4eaa936eeb7964f03, type: 2}
   currentAnxiety: 0
   maxAnxiety: 0
   rate: 0

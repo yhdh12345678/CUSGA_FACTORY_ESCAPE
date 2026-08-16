@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Accessibility;
 using UnityEngine.UI;
 
 public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
@@ -29,6 +31,39 @@ public class NodeMapBuilder : SingletonMonobehaviour<NodeMapBuilder>
         InstantiateNodes();
 
         LocateCameraAtEntranceNode();
+        Node entranceNode = null;
+        foreach (Node node in nodeHasCreated.Values)
+        {
+            if (node.nodeType != null && node.nodeType.isEntrance)
+            {
+                entranceNode = node;
+                break;
+            }
+        }
+        StartCoroutine(RevealEntranceChildrenForAccessibility(entranceNode));
+    }
+
+    private IEnumerator RevealEntranceChildrenForAccessibility(Node node)
+    {
+        yield return null;
+        if (!AssistiveSupport.isScreenReaderEnabled || node == null)
+        {
+            yield break;
+        }
+
+        if (node.nodeType == null || !node.nodeType.isEntrance ||
+            !node.gameObject.activeInHierarchy)
+        {
+            yield break;
+        }
+
+        if (!node.hasPopUp && node.nodeInfos.Count > 0)
+        {
+            node.PopUpChildNode(node.nodeInfos);
+            node.hasPopUp = true;
+        }
+
+        FactoryEscapeAccessibility.EnterNodeScope(node);
     }
 
     /// <summary>

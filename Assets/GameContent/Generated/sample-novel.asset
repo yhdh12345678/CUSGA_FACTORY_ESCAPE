@@ -1,0 +1,77 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8cd204a951e99a49ab30d5c0043825d, type: 3}
+  m_Name: sample-novel
+  m_EditorClassIdentifier: Assembly-CSharp::TextAdventureGameSO
+  schemaVersion: 1
+  gameId: sample-novel
+  displayName: "\u96E8\u591C\u6765\u4FE1"
+  protagonistName: "\u6797\u6653"
+  mode: 1
+  story:
+    firstPageId: chapter1-arrival
+    chapters:
+    - id: chapter1
+      title: "\u7B2C\u4E00\u7AE0 \u96E8\u591C"
+    pages:
+    - id: chapter1-arrival
+      chapterId: chapter1
+      title: "\u8F66\u7AD9"
+      visualDescription: "\u591C\u96E8\u843D\u5728\u7A7A\u65F7\u7AD9\u53F0\u4E0A\uFF0C\u8FDC\u5904\u53EA\u6709\u4E00\u76CF\u660F\u9EC4\u7684\u706F\u3002"
+      artwork: {fileID: 0}
+      lines:
+      - speaker: "\u65C1\u767D"
+        text: "\u6797\u6653\u5728\u957F\u6905\u65C1\u53D1\u73B0\u4E00\u5C01\u6CA1\u6709\u7F72\u540D\u7684\u4FE1\u3002"
+      - speaker: "\u6797\u6653"
+        text: "\u8FD9\u5C01\u4FE1\u4E3A\u4EC0\u4E48\u4F1A\u5199\u7740\u6211\u7684\u540D\u5B57\uFF1F"
+      nextPageId: chapter1-choice
+      choices: []
+    - id: chapter1-choice
+      chapterId: chapter1
+      title: "\u672A\u7F72\u540D\u7684\u4FE1"
+      visualDescription: "\u767D\u8272\u4FE1\u5C01\u88AB\u96E8\u6C34\u6253\u6E7F\uFF0C\u5C01\u53E3\u5904\u753B\u7740\u4E00\u4E2A\u5C0F\u5C0F\u7684\u5706\u5708\u3002"
+      artwork: {fileID: 0}
+      lines:
+      - speaker: "\u65C1\u767D"
+        text: "\u5979\u5FC5\u987B\u51B3\u5B9A\u662F\u5426\u7ACB\u523B\u62C6\u5F00\u4FE1\u5C01\u3002"
+      nextPageId:
+      choices:
+      - id: open
+        label: "\u73B0\u5728\u62C6\u5F00\u4FE1\u5C01"
+        nextPageId: chapter1-opened
+      - id: keep
+        label: "\u5148\u628A\u4FE1\u6536\u597D"
+        nextPageId: chapter1-kept
+    - id: chapter1-opened
+      chapterId: chapter1
+      title: "\u4FE1\u4E2D\u7684\u7EA6\u5B9A"
+      visualDescription: "\u4FE1\u7EB8\u4E0A\u53EA\u6709\u4E00\u884C\u6E05\u6670\u7684\u9ED1\u8272\u5B57\u8FF9\u3002"
+      artwork: {fileID: 0}
+      lines:
+      - speaker: "\u65C1\u767D"
+        text: "\u4FE1\u4E0A\u7EA6\u5979\u660E\u5929\u6E05\u6668\u56DE\u5230\u8FD9\u91CC\u3002"
+      nextPageId:
+      choices: []
+    - id: chapter1-kept
+      chapterId: chapter1
+      title: "\u5E26\u8D70\u79D8\u5BC6"
+      visualDescription: "\u6797\u6653\u628A\u4FE1\u653E\u8FDB\u53E3\u888B\uFF0C\u8F6C\u8EAB\u8D70\u5165\u7AD9\u5916\u7684\u96E8\u5E55\u3002"
+      artwork: {fileID: 0}
+      lines:
+      - speaker: "\u65C1\u767D"
+        text: "\u5979\u51B3\u5B9A\u7B49\u56DE\u5230\u5B89\u5168\u7684\u5730\u65B9\u518D\u6253\u5F00\u5B83\u3002"
+      nextPageId:
+      choices: []
+  legacyLevels: []
+  skyUiLevelIndex: -1
+  primaryEnding: []
+  alternateEnding: []

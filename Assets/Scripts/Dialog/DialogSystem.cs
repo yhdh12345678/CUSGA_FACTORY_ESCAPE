@@ -151,7 +151,7 @@ public class DialogSystem : SingletonMonobehaviour<DialogSystem>
 
         return speakers.Count == 0
             ? "人物对话画面，左右两侧显示参与对话的角色立绘。"
-            : $"人物对话画面，{string.Join("、", speakers)}参与交谈，当前说话者的立绘高亮。";
+            : $"人物对话画面，{string.Join("、", speakers)}参与交谈。";
     }
 
     public List<string> GetAccessibilityTextLines()

@@ -50,10 +50,10 @@ public static class FactoryEscapeChineseFontOptimizer
         EditorApplication.delayCall += RunPendingRequest;
     }
 
-    [MenuItem("Tools/Factory Escape/生成高清中文字体")]
+    [MenuItem("Tools/Factory Escape/验证系统中文字体后备")]
     public static void GenerateFromMenu()
     {
-        GenerateAndReplace();
+        Debug.Log(ValidateDynamicFallback());
     }
 
     private static void RunPendingRequest()
@@ -66,7 +66,7 @@ public static class FactoryEscapeChineseFontOptimizer
         File.Delete(RequestPath);
         try
         {
-            string result = GenerateAndReplace();
+            string result = ValidateDynamicFallback();
             File.WriteAllText(ResultPath, "SUCCESS\n" + result, new UTF8Encoding(false));
         }
         catch (Exception exception)
@@ -74,6 +74,25 @@ public static class FactoryEscapeChineseFontOptimizer
             File.WriteAllText(ResultPath, "ERROR\n" + exception, new UTF8Encoding(false));
             Debug.LogException(exception);
         }
+    }
+
+    private static string ValidateDynamicFallback()
+    {
+        TMP_FontAsset fallback =
+            AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FallbackFontAssetPath);
+        if (fallback == null ||
+            fallback.atlasPopulationMode != AtlasPopulationMode.Dynamic ||
+            fallback.sourceFontFile == null)
+        {
+            throw new InvalidOperationException("系统字体的动态中文后备资源无效。");
+        }
+
+        if (AssetDatabase.LoadMainAssetAtPath(FontAssetPath) != null)
+        {
+            throw new InvalidOperationException("大型静态中文字体仍在 Assets 中，减包配置无效。");
+        }
+
+        return $"动态中文后备字体有效：{FallbackFontAssetPath}";
     }
 
     private static string GenerateAndReplace()

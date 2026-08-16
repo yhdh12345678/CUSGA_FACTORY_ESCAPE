@@ -862,8 +862,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "823\u7126\u8651\u6C34\u5E73:"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 24145583281976841bc5d51923c3c58a, type: 2}
-  m_sharedMaterial: {fileID: 2179534826905807720, guid: 24145583281976841bc5d51923c3c58a, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
+  m_sharedMaterial: {fileID: 2179534826905807720, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -2253,8 +2253,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: 95%
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 24145583281976841bc5d51923c3c58a, type: 2}
-  m_sharedMaterial: {fileID: 2179534826905807720, guid: 24145583281976841bc5d51923c3c58a, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
+  m_sharedMaterial: {fileID: 2179534826905807720, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -2501,8 +2501,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: 823
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 24145583281976841bc5d51923c3c58a, type: 2}
-  m_sharedMaterial: {fileID: 2179534826905807720, guid: 24145583281976841bc5d51923c3c58a, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
+  m_sharedMaterial: {fileID: 2179534826905807720, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -2765,8 +2765,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u4F60\u597D"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 24145583281976841bc5d51923c3c58a, type: 2}
-  m_sharedMaterial: {fileID: 2179534826905807720, guid: 24145583281976841bc5d51923c3c58a, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
+  m_sharedMaterial: {fileID: 2179534826905807720, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -3655,7 +3655,7 @@ GameObject:
   - component: {fileID: 657160192427172541}
   - component: {fileID: 5111968099574306251}
   m_Layer: 5
-  m_Name: Button (Legacy)
+  m_Name: 提交
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3830,8 +3830,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u5BF9\u8BDD\u5269\u4F59\u6B21\u6570:\n"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 24145583281976841bc5d51923c3c58a, type: 2}
-  m_sharedMaterial: {fileID: 2179534826905807720, guid: 24145583281976841bc5d51923c3c58a, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
+  m_sharedMaterial: {fileID: 2179534826905807720, guid: 68c4de4bafc3ebd48ab322daa406c29b, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []

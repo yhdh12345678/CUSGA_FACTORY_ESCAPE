@@ -173,8 +173,9 @@ public class Level1AILock : MonoBehaviour, IAccessibleNodeAction
     private void OpenAIDialog()
     {
         tongyi_AI.instance.SubmitTimer = submissionTimes;
-        tongyi_AI.instance.send_button.interactable = true;
-        tongyi_AI.instance.input_field.SetActive(true);
+        tongyi_AI.instance.send_button.interactable = false;
+        tongyi_AI.instance.send_button.gameObject.SetActive(false);
+        tongyi_AI.instance.input_field.SetActive(false);
         UIManager.Instance.UIShow = true;
         DialogSystem.Instance.AIDialogPanel.gameObject.SetActive(true);
         DialogSystem.Instance.anxietyValue.localScale = new Vector3(

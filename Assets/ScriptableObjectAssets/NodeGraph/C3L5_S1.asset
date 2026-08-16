@@ -767,7 +767,7 @@ MonoBehaviour:
     height: 100
   isLeftClickDragging: 0
   isSelected: 0
-  submissionTimes: 5
+  submissionTimes: 3
   openingRemark: "\u5C0F\u660E\uFF0C\u5230\u4E86\u73B0\u5728\u7684\u65F6\u95F4\uFF0C\u603B\u662F\u6709\u5404\u79CD\u65B9\u9762\u7684\u95EE\u9898\u56F0\u6270\u6211\uFF0C\u6211\u603B\u662F\u4E0A\u4E0B\u4E3A\u96BE\uFF0C\u6211\u5B9E\u5728\u65E0\u5FC3\u9762\u5BF9\u8FD9\u4E9B\u9EBB\u70E6\u3002"
   AIName: 823
   failCutScene:

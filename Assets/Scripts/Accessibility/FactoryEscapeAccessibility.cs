@@ -15,6 +15,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private enum MainMenuPage
     {
         Root,
+        GameActions,
         Options,
         MusicVolume,
         SfxVolume
@@ -35,6 +36,9 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private readonly AccessibilityHierarchy hierarchy = new AccessibilityHierarchy();
     private string currentSignature = string.Empty;
     private string lastNodeContext = string.Empty;
+    private string nodeActionResult = string.Empty;
+    private string nodeScopeRootId = string.Empty;
+    private string pendingAnnouncement = string.Empty;
     private string pendingFocusKey = string.Empty;
     private string modalReturnFocusKey = string.Empty;
     private MainMenuPage mainMenuPage;
@@ -99,6 +103,23 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         {
             instance.pendingFocusKey = focusKey;
         }
+        instance.QueueRefresh();
+    }
+
+    public static void EnterNodeScope(Node rootNode)
+    {
+        if (instance == null || rootNode == null)
+        {
+            return;
+        }
+
+        instance.nodeScopeRootId = rootNode.id;
+        Node firstChild = rootNode.nodeInfos
+            .Select(info => info.node)
+            .FirstOrDefault(node => node != null && node.gameObject.activeInHierarchy);
+        instance.pendingFocusKey = firstChild == null
+            ? string.Empty
+            : $"node-{firstChild.GetInstanceID()}";
         instance.QueueRefresh();
     }
 
@@ -305,7 +326,13 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         if (notify && hierarchy.rootNodes.Count > 0)
         {
             AssistiveSupport.notificationDispatcher.SendScreenChanged(focusTarget ?? hierarchy.rootNodes[0]);
+            if (!string.IsNullOrWhiteSpace(pendingAnnouncement))
+            {
+                AssistiveSupport.notificationDispatcher.SendAnnouncement(pendingAnnouncement);
+            }
         }
+
+        pendingAnnouncement = string.Empty;
 
 #if UNITY_EDITOR
         string previewFocusKey = focusTarget == null ? string.Empty : pendingFocusKey;
@@ -531,6 +558,13 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
             return CollectMainMenuItems();
         }
 
+        GameManager activeGameManager = GameManager.Instance;
+        if (IsSceneLoaded("GameScene") && activeGameManager != null &&
+            activeGameManager.IsTextStoryMode)
+        {
+            return CollectTextStoryItems(activeGameManager);
+        }
+
         var items = new List<Item>();
         UIManager uiManager = FindFirstObjectByType<UIManager>();
         if (!IsSceneLoaded("GameScene"))
@@ -624,38 +658,43 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                     ? 0
                     : Mathf.RoundToInt(gameManager.currentAnxiety / gameManager.maxAnxiety * 100f);
                 AddStaticText(items, "ai-status",
-                    $"焦虑水平{anxietyPercentage}%，剩余提交{Mathf.Max(0, ai.SubmitTimer)}次");
+                    $"焦虑水平{anxietyPercentage}%，剩余选择{Mathf.Max(0, ai.SubmitTimer)}次");
             }
 
-            if (!resultReady)
+            if (!resultReady && ai != null && dialogSystem.textFinished)
             {
-                foreach (InputField input in dialogSystem.AIDialogPanel.GetComponentsInChildren<InputField>(false))
+                AddStaticText(items, "ai-instruction", "请选择一句话安抚823。");
+                AddAction(items, "ai-choice-best", "你已经做得很好了，我会陪着你。", () =>
                 {
-                    items.Add(new Item
-                    {
-                        key = $"input-{input.GetInstanceID()}",
-                        label = GetInputLabel(input),
-                        value = input.text,
-                        role = AccessibilityRole.TextField,
-                        activate = () =>
-                        {
-                            input.ActivateInputField();
-                            return true;
-                        },
-                        setValue = value => input.text = value
-                    });
-                }
+                    bool submitted = ai.SubmitPresetResponse(
+                        "你已经做得很好了，我会陪着你。", ai.three_change_value);
+                    QueueRefresh();
+                    return submitted;
+                });
+                AddAction(items, "ai-choice-medium", "先慢慢来，我们换个角度继续。", () =>
+                {
+                    bool submitted = ai.SubmitPresetResponse(
+                        "先慢慢来，我们换个角度继续。", ai.two_change_value);
+                    QueueRefresh();
+                    return submitted;
+                });
+                AddAction(items, "ai-choice-poor", "现在没时间焦虑，快点破解。", () =>
+                {
+                    bool submitted = ai.SubmitPresetResponse(
+                        "现在没时间焦虑，快点破解。", ai.one_change_value);
+                    QueueRefresh();
+                    return submitted;
+                });
             }
 
             foreach (Button button in dialogSystem.AIDialogPanel.GetComponentsInChildren<Button>(false))
             {
-                if (resultReady && ai != null && button == ai.send_button)
+                if (ai != null && button == ai.send_button)
                 {
                     continue;
                 }
 
-                bool canActivate = button.IsInteractable() &&
-                                   (ai == null || button != ai.send_button || ai.CanSend);
+                bool canActivate = button.IsInteractable();
                 items.Add(new Item
                 {
                     key = $"button-{button.GetInstanceID()}",
@@ -728,17 +767,42 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
             return items;
         }
 
-        Node[] gameNodes = FindObjectsByType<Node>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)
+        Node[] activeGameNodes = FindObjectsByType<Node>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)
             .Where(node => node.gameObject.activeInHierarchy)
             .OrderBy(node => node.rect.y)
             .ThenBy(node => node.rect.x)
             .ThenBy(node => node.id)
             .ToArray();
 
+        Dictionary<string, Node> activeNodesById = activeGameNodes
+            .Where(node => !string.IsNullOrWhiteSpace(node.id))
+            .GroupBy(node => node.id)
+            .ToDictionary(group => group.Key, group => group.First());
+        Node scopeRoot = activeGameNodes.FirstOrDefault(node => node.id == nodeScopeRootId);
+        if (scopeRoot == null && !string.IsNullOrWhiteSpace(nodeScopeRootId))
+        {
+            nodeScopeRootId = string.Empty;
+            nodeActionResult = string.Empty;
+        }
+
+        Node[] gameNodes = scopeRoot == null
+            ? activeGameNodes.Where(node => string.IsNullOrWhiteSpace(node.parentID) ||
+                !activeNodesById.ContainsKey(node.parentID)).ToArray()
+            : activeGameNodes.Where(node => node != scopeRoot).ToArray();
+
         if (uiManager != null && uiManager.nodeTextForShow != null)
         {
             AddStaticText(items, "node-prompt",
                 uiManager.nodeTextForShow.GetComponent<TMP_Text>()?.text);
+        }
+
+        AddStaticText(items, "node-action-result", nodeActionResult);
+        GameManager currentGameManager = GameManager.Instance;
+        if (currentGameManager != null && currentGameManager.levelIndex == 1 &&
+            currentGameManager.level1GetResultTimes > 0)
+        {
+            AddStaticText(items, "level1-next-step",
+                "破解未成功。机房和主管办公室已解锁，请前往新区域继续调查。");
         }
 
         foreach (Node gameNode in gameNodes)
@@ -768,10 +832,59 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                         pendingFocusKey = "node-prompt";
                     }
 
+                    HashSet<string> activeChildIds = gameNode.nodeInfos
+                        .Where(info => info.node != null && info.node.gameObject.activeInHierarchy)
+                        .Select(info => info.node.id)
+                        .ToHashSet();
+                    Synthesizer synthesizer = gameNode.GetComponent<Synthesizer>();
+                    string consumedNodeLabel = synthesizer != null && synthesizer.targetNode != null &&
+                                               synthesizer.targetNode.gameObject.activeInHierarchy
+                        ? GetNodeLabel(synthesizer.targetNode)
+                        : string.Empty;
                     bool activated = gameNode.ActivateForAccessibility();
+                    List<Node> revealedNodes = gameNode.nodeInfos
+                        .Where(info => info.node != null && info.node.gameObject.activeInHierarchy &&
+                                       !activeChildIds.Contains(info.node.id))
+                        .Select(info => info.node)
+                        .ToList();
+                    if (revealedNodes.Count > 0)
+                    {
+                        nodeActionResult = BuildNodeActionResult(
+                            label, consumedNodeLabel, revealedNodes.Select(GetNodeLabel).ToList());
+                        pendingAnnouncement = AssistiveSupport.isScreenReaderEnabled
+                            ? nodeActionResult
+                            : string.Empty;
+                        pendingFocusKey = $"node-{revealedNodes[0].GetInstanceID()}";
+                    }
+
+                    bool isOverviewNode = string.IsNullOrWhiteSpace(gameNode.parentID) ||
+                                          !activeNodesById.ContainsKey(gameNode.parentID);
+                    if (activated && isOverviewNode &&
+                        (revealedNodes.Count > 0 || activeGameNodes.Any(node => node != gameNode &&
+                            IsDescendantOf(node, gameNode.id, activeNodesById))))
+                    {
+                        nodeScopeRootId = gameNode.id;
+                    }
+
                     QueueRefresh();
                     return activated;
                 }
+            });
+        }
+
+        if (scopeRoot != null)
+        {
+            AddAction(items, "node-overview-back", "返回节点总览", () =>
+            {
+                string rootId = nodeScopeRootId;
+                nodeScopeRootId = string.Empty;
+                nodeActionResult = string.Empty;
+                Node rootNode = activeGameNodes.FirstOrDefault(node => node.id == rootId);
+                pendingFocusKey = rootNode == null
+                    ? string.Empty
+                    : $"node-{rootNode.GetInstanceID()}";
+                QueueRefresh();
+                return true;
             });
         }
 
@@ -847,6 +960,77 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         return items;
     }
 
+    private List<Item> CollectTextStoryItems(GameManager gameManager)
+    {
+        var items = new List<Item>();
+        TextAdventurePage page = gameManager.CurrentTextStoryPage;
+        if (page == null)
+        {
+            AddStaticText(items, "story-loading", "正在载入剧情");
+            return items;
+        }
+
+        if (!string.IsNullOrWhiteSpace(gameManager.CurrentTextStoryChapterTitle))
+        {
+            items.Add(new Item
+            {
+                key = "story-chapter",
+                label = gameManager.CurrentTextStoryChapterTitle,
+                role = AccessibilityRole.Header
+            });
+        }
+
+        AddStaticText(items, "story-description", $"画面描述：{page.visualDescription}");
+        List<TextAdventureLine> storyLines = page.lines ?? new List<TextAdventureLine>();
+        for (int index = 0; index < storyLines.Count; index++)
+        {
+            TextAdventureLine line = storyLines[index];
+            if (line == null || string.IsNullOrWhiteSpace(line.text))
+            {
+                continue;
+            }
+
+            string text = string.IsNullOrWhiteSpace(line.speaker)
+                ? line.text
+                : $"{line.speaker}：{line.text}";
+            AddStaticText(items, $"story-line-{index}", text);
+        }
+
+        if (page.choices != null && page.choices.Count > 0)
+        {
+            foreach (TextAdventureChoice choice in page.choices)
+            {
+                TextAdventureChoice currentChoice = choice;
+                AddAction(items, $"story-choice-{currentChoice.id}", currentChoice.label, () =>
+                {
+                    bool advanced = gameManager.ChooseTextStory(currentChoice.id);
+                    QueueRefresh();
+                    return advanced;
+                });
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(page.nextPageId))
+        {
+            AddAction(items, "story-continue", "继续剧情", () =>
+            {
+                bool advanced = gameManager.ContinueTextStory();
+                QueueRefresh();
+                return advanced;
+            });
+        }
+        else
+        {
+            AddStaticText(items, "story-ending", "故事结束");
+        }
+
+        AddAction(items, "story-save-quit", "存档并退出", () =>
+        {
+            gameManager.StartSaveAndQuit();
+            return true;
+        });
+        return items;
+    }
+
     private List<Item> CollectMainMenuItems()
     {
         var items = new List<Item>();
@@ -874,7 +1058,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
             AddAction(items, "main-new-game-cancel", "保留存档", () =>
             {
                 bool cancelled = gameMenu.CancelStartGame();
-                pendingFocusKey = "main-start";
+                pendingFocusKey = "game-start";
                 QueueRefresh();
                 return cancelled;
             });
@@ -883,12 +1067,29 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
 
         switch (mainMenuPage)
         {
+            case MainMenuPage.GameActions:
+                AddAction(items, "game-start", "开始游戏", () =>
+                {
+                    bool requested = gameMenu.RequestStartGameForAccessibility();
+                    if (gameMenu.AwaitingNewGameConfirmation)
+                    {
+                        pendingFocusKey = "main-new-game-confirm";
+                    }
+                    QueueRefresh();
+                    return requested;
+                });
+                AddAction(items, "game-continue", "继续游戏", () => ContinueFromMain(gameMenu));
+                AddAction(items, "game-list-back", "返回游戏列表",
+                    () => OpenMainMenuPage(MainMenuPage.Root,
+                        $"catalog-game-{GameManager.Instance.gameDefinition.gameId}"));
+                break;
+
             case MainMenuPage.Options:
                 AddAction(items, "main-music-volume", "音乐音量",
                     () => OpenMainMenuPage(MainMenuPage.MusicVolume));
                 AddAction(items, "main-sfx-volume", "音效音量",
                     () => OpenMainMenuPage(MainMenuPage.SfxVolume));
-                AddAction(items, "main-options-back", "返回主菜单",
+                AddAction(items, "main-options-back", "返回游戏列表",
                     () => OpenMainMenuPage(MainMenuPage.Root, "main-options"));
                 break;
 
@@ -905,20 +1106,28 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                 break;
 
             default:
-                AddAction(items, "main-start", "开始游戏", () =>
+                GameManager manager = GameManager.Instance;
+                if (manager != null && manager.AvailableGames.Count > 0)
                 {
-                    bool requested = gameMenu.RequestStartGameForAccessibility();
-                    if (gameMenu.AwaitingNewGameConfirmation)
+                    foreach (TextAdventureGameSO game in manager.AvailableGames)
                     {
-                        pendingFocusKey = "main-new-game-confirm";
+                        TextAdventureGameSO currentGame = game;
+                        AddAction(items, $"catalog-game-{currentGame.gameId}", currentGame.displayName, () =>
+                        {
+                            bool selected = manager.SelectGame(currentGame);
+                            if (selected)
+                            {
+                                mainMenuPage = MainMenuPage.GameActions;
+                                pendingFocusKey = "game-start";
+                            }
+                            QueueRefresh();
+                            return selected;
+                        });
                     }
-                    QueueRefresh();
-                    return requested;
-                });
-                AddAction(items, "main-continue", "继续游戏", () => ContinueFromMain(gameMenu));
+                }
                 AddAction(items, "main-options", "选项",
                     () => OpenMainMenuPage(MainMenuPage.Options));
-                AddAction(items, "main-quit", "退出游戏", () =>
+                AddAction(items, "main-quit", "退出应用", () =>
                 {
                     gameMenu.QuitGame();
                     return true;
@@ -1012,6 +1221,13 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
 
     private string GetPortraitTitle()
     {
+        GameManager gameManager = GameManager.Instance;
+        if (gameManager != null && gameManager.IsTextStoryMode &&
+            gameManager.CurrentTextStoryPage != null)
+        {
+            return gameManager.CurrentTextStoryPage.title;
+        }
+
         VideoManager videoManager = FindFirstObjectByType<VideoManager>();
         if (videoManager != null && videoManager.cutSceneUIPanel.gameObject.activeInHierarchy)
         {
@@ -1046,6 +1262,8 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         {
             switch (mainMenuPage)
             {
+                case MainMenuPage.GameActions:
+                    return gameManager == null ? "游戏" : gameManager.DisplayName;
                 case MainMenuPage.MusicVolume:
                     return "音乐音量";
                 case MainMenuPage.SfxVolume:
@@ -1053,7 +1271,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                 case MainMenuPage.Options:
                     return "选项";
                 default:
-                    return "抓住未尽的余晖";
+                    return "选择游戏";
             }
         }
 
@@ -1062,6 +1280,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
 
     private Sprite GetPortraitArtwork()
     {
+        GameManager gameManager = GameManager.Instance;
+        if (gameManager != null && gameManager.IsTextStoryMode)
+        {
+            return gameManager.CurrentTextStoryPage?.artwork;
+        }
+
         UIManager uiManager = FindFirstObjectByType<UIManager>();
         if (uiManager != null && uiManager.graphNodeUI != null &&
             uiManager.graphNodeUI.gameObject.activeInHierarchy)
@@ -1269,6 +1493,52 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         }
 
         return string.IsNullOrWhiteSpace(label) ? "未命名操作" : label.Trim();
+    }
+
+    private static bool IsDescendantOf(
+        Node node, string ancestorId, IReadOnlyDictionary<string, Node> nodesById)
+    {
+        string parentId = node.parentID;
+        var visited = new HashSet<string>();
+        while (!string.IsNullOrWhiteSpace(parentId) && visited.Add(parentId))
+        {
+            if (parentId == ancestorId)
+            {
+                return true;
+            }
+
+            if (!nodesById.TryGetValue(parentId, out Node parent))
+            {
+                return false;
+            }
+
+            parentId = parent.parentID;
+        }
+
+        return false;
+    }
+
+    private static string BuildNodeActionResult(
+        string actionLabel, string consumedNodeLabel, List<string> revealedNodeLabels)
+    {
+        string discoveries = string.Join("、", revealedNodeLabels.Where(label =>
+            !string.IsNullOrWhiteSpace(label)));
+        if (actionLabel.Contains("传送带", StringComparison.Ordinal) &&
+            discoveries.Contains("撬棍", StringComparison.Ordinal))
+        {
+            return "传送带已启动，发现撬棍。";
+        }
+
+        if (!string.IsNullOrWhiteSpace(consumedNodeLabel))
+        {
+            return string.IsNullOrWhiteSpace(discoveries)
+                ? $"已使用{consumedNodeLabel}。"
+                : $"已使用{consumedNodeLabel}，发现{discoveries}。";
+        }
+
+        return string.IsNullOrWhiteSpace(discoveries)
+            ? $"已完成{actionLabel}。"
+            : $"操作完成，发现{discoveries}。";
     }
 
     private static string GetButtonLabel(Button button)

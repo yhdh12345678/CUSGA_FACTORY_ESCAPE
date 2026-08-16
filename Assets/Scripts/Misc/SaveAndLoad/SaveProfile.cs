@@ -42,3 +42,10 @@ public record GameProgressState : SaveProfileData
     public int previousChapterBot;
     public int level1GetResultTimes;
 }
+
+public record TextStoryProgressState : SaveProfileData
+{
+    public int version;
+    public string gameId;
+    public string pageId;
+}
