@@ -47,14 +47,19 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private string currentVisualSignature = string.Empty;
     private PortraitTextPresentation portraitPresentation;
     private GameMenu currentMainMenu;
+    private bool embeddedGameActive;
 
 #if UNITY_EDITOR
     [Serializable]
     private sealed class PreviewState
     {
         public long revision;
+        public string projectLabel;
+        public string pageLabel;
         public string focusKey;
         public string status;
+        public string interactionMode;
+        public bool gesturePanelAvailable;
         public List<PreviewItem> items;
     }
 
@@ -84,13 +89,55 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private string previewStatus = "预览已连接";
     private bool previewConfiguredRunInBackground;
     private bool previewPreviousRunInBackground;
-    private bool previewConfiguredAudioVolume;
-    private float previewPreviousAudioVolume;
     private bool previewConfiguredScreenReader;
     private AssistiveSupport.ScreenReaderStatusOverride previewPreviousScreenReader;
 #endif
 
     public static bool ReduceMotion => AssistiveSupport.isScreenReaderEnabled;
+
+    public static void EnterEmbeddedGame()
+    {
+        if (instance == null)
+        {
+            return;
+        }
+
+        instance.embeddedGameActive = true;
+        instance.currentSignature = string.Empty;
+        instance.currentVisualSignature = string.Empty;
+        instance.hierarchy.Clear();
+        if (AssistiveSupport.activeHierarchy == instance.hierarchy)
+        {
+            AssistiveSupport.activeHierarchy = null;
+        }
+        if (instance.portraitPresentation?.PresentationRoot != null)
+        {
+            instance.portraitPresentation.PresentationRoot.gameObject.SetActive(false);
+        }
+    }
+
+    public static void ExitEmbeddedGame(string announcement)
+    {
+        if (instance == null)
+        {
+            return;
+        }
+
+        instance.embeddedGameActive = false;
+        instance.mainMenuPage = MainMenuPage.GameActions;
+        instance.pendingFocusKey = "game-continue";
+        instance.pendingAnnouncement = announcement ?? string.Empty;
+#if UNITY_EDITOR
+        instance.previewStatus = instance.pendingAnnouncement;
+#endif
+        instance.currentSignature = string.Empty;
+        instance.currentVisualSignature = string.Empty;
+        if (instance.portraitPresentation?.PresentationRoot != null)
+        {
+            instance.portraitPresentation.PresentationRoot.gameObject.SetActive(true);
+        }
+        instance.StartCoroutine(instance.RefreshAfterLayout(true));
+    }
 
     public static void RefreshScreen(string focusKey = "")
     {
@@ -217,6 +264,11 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
 
     private void Update()
     {
+        if (embeddedGameActive)
+        {
+            return;
+        }
+
 #if UNITY_EDITOR
         UpdateEditorPreview();
 #endif
@@ -259,6 +311,11 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
 
     private void OnScreenReaderStatusChanged(bool enabled)
     {
+        if (embeddedGameActive)
+        {
+            return;
+        }
+
         if (enabled)
         {
             StartCoroutine(RefreshAfterLayout(true));
@@ -282,6 +339,10 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private IEnumerator RefreshAfterLayout(bool screenChanged)
     {
         yield return new WaitForEndOfFrame();
+        if (embeddedGameActive)
+        {
+            yield break;
+        }
         List<Item> items = CollectItems();
         PresentPortrait(items, BuildSignature(items));
         if (AssistiveSupport.isScreenReaderEnabled)
@@ -352,7 +413,6 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         }
 
         EnableEditorPreviewOverrides();
-        AudioListener.volume = 0f;
 
         if (AssistiveSupport.screenReaderStatusOverride !=
             AssistiveSupport.ScreenReaderStatusOverride.ForceEnabled)
@@ -468,8 +528,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         var state = new PreviewState
         {
             revision = ++previewRevision,
+            projectLabel = "文字冒险屋",
+            pageLabel = GetPortraitTitle(),
             focusKey = focusKey,
             status = status,
+            interactionMode = "Keyboard",
+            gesturePanelAvailable = false,
             items = items.Select(item => new PreviewItem
             {
                 key = item.key,
@@ -502,13 +566,6 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
             Application.runInBackground = true;
         }
 
-        if (!previewConfiguredAudioVolume)
-        {
-            previewPreviousAudioVolume = AudioListener.volume;
-            previewConfiguredAudioVolume = true;
-            AudioListener.volume = 0f;
-        }
-
         if (!previewConfiguredScreenReader)
         {
             previewPreviousScreenReader = AssistiveSupport.screenReaderStatusOverride;
@@ -522,12 +579,6 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         {
             Application.runInBackground = previewPreviousRunInBackground;
             previewConfiguredRunInBackground = false;
-        }
-
-        if (previewConfiguredAudioVolume)
-        {
-            AudioListener.volume = previewPreviousAudioVolume;
-            previewConfiguredAudioVolume = false;
         }
 
         if (previewConfiguredScreenReader)
@@ -559,6 +610,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         }
 
         GameManager activeGameManager = GameManager.Instance;
+        if (IsSceneLoaded("GameScene") && activeGameManager != null &&
+            activeGameManager.IsInkStoryMode)
+        {
+            return CollectInkStoryItems(activeGameManager);
+        }
+
         if (IsSceneLoaded("GameScene") && activeGameManager != null &&
             activeGameManager.IsTextStoryMode)
         {
@@ -1031,6 +1088,66 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         return items;
     }
 
+    private List<Item> CollectInkStoryItems(GameManager gameManager)
+    {
+        var items = new List<Item>();
+        InkAdventurePage page = gameManager.CurrentInkStoryPage;
+        if (page == null)
+        {
+            AddStaticText(items, "story-loading", "正在载入剧情");
+            return items;
+        }
+
+        if (!string.IsNullOrWhiteSpace(page.title))
+        {
+            items.Add(new Item
+            {
+                key = "story-chapter",
+                label = page.title,
+                role = AccessibilityRole.Header
+            });
+        }
+
+        AddStaticText(items, "story-description", $"画面描述：{page.visualDescription}");
+        for (int index = 0; index < page.lines.Count; index++)
+        {
+            TextAdventureLine line = page.lines[index];
+            if (line == null || string.IsNullOrWhiteSpace(line.text))
+            {
+                continue;
+            }
+
+            string text = string.IsNullOrWhiteSpace(line.speaker)
+                ? line.text
+                : $"{line.speaker}：{line.text}";
+            AddStaticText(items, $"story-line-{page.sequence}-{index}", text);
+        }
+
+        foreach (InkAdventureChoice choice in page.choices)
+        {
+            InkAdventureChoice currentChoice = choice;
+            AddAction(items, $"story-choice-{page.sequence}-{currentChoice.index}",
+                currentChoice.label, () =>
+                {
+                    bool advanced = gameManager.ChooseInkStory(currentChoice.index);
+                    QueueRefresh();
+                    return advanced;
+                });
+        }
+
+        if (page.isEnding)
+        {
+            AddStaticText(items, "story-ending", "故事结束");
+        }
+
+        AddAction(items, "story-save-quit", "存档并退出", () =>
+        {
+            gameManager.StartSaveAndQuit();
+            return true;
+        });
+        return items;
+    }
+
     private List<Item> CollectMainMenuItems()
     {
         var items = new List<Item>();
@@ -1049,13 +1166,13 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         if (gameMenu.AwaitingNewGameConfirmation)
         {
             AddStaticText(items, "main-new-game-warning", "已有存档，重新开始将删除原存档");
-            AddAction(items, "main-new-game-confirm", "确认重新开始", () =>
+            AddMenuAction(items, "main-new-game-confirm", "确认重新开始", () =>
             {
                 bool confirmed = gameMenu.ConfirmStartGame();
                 QueueRefresh();
                 return confirmed;
             });
-            AddAction(items, "main-new-game-cancel", "保留存档", () =>
+            AddMenuAction(items, "main-new-game-cancel", "保留存档", () =>
             {
                 bool cancelled = gameMenu.CancelStartGame();
                 pendingFocusKey = "game-start";
@@ -1068,7 +1185,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         switch (mainMenuPage)
         {
             case MainMenuPage.GameActions:
-                AddAction(items, "game-start", "开始游戏", () =>
+                AddMenuAction(items, "game-start", "开始游戏", () =>
                 {
                     bool requested = gameMenu.RequestStartGameForAccessibility();
                     if (gameMenu.AwaitingNewGameConfirmation)
@@ -1078,30 +1195,45 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                     QueueRefresh();
                     return requested;
                 });
-                AddAction(items, "game-continue", "继续游戏", () => ContinueFromMain(gameMenu));
-                AddAction(items, "game-list-back", "返回游戏列表",
+                if (GameManager.Instance.IsDarkRoomMode && !GameManager.Instance.HasSavedGame)
+                {
+                    items.Add(new Item
+                    {
+                        key = "game-continue",
+                        label = "继续游戏",
+                        role = AccessibilityRole.Button,
+                        state = AccessibilityState.Disabled
+                    });
+                }
+                else
+                {
+                    AddMenuAction(items, "game-continue", "继续游戏", () => ContinueFromMain(gameMenu));
+                }
+                AddMenuAction(items, "game-list-back", "返回文字冒险屋",
                     () => OpenMainMenuPage(MainMenuPage.Root,
                         $"catalog-game-{GameManager.Instance.gameDefinition.gameId}"));
                 break;
 
             case MainMenuPage.Options:
-                AddAction(items, "main-music-volume", "音乐音量",
+                AddMenuAction(items, "main-music-volume", "音乐音量",
                     () => OpenMainMenuPage(MainMenuPage.MusicVolume));
-                AddAction(items, "main-sfx-volume", "音效音量",
+                AddAudioToggle(items, gameMenu, true);
+                AddMenuAction(items, "main-sfx-volume", "音效音量",
                     () => OpenMainMenuPage(MainMenuPage.SfxVolume));
-                AddAction(items, "main-options-back", "返回游戏列表",
+                AddAudioToggle(items, gameMenu, false);
+                AddMenuAction(items, "main-options-back", "返回文字冒险屋",
                     () => OpenMainMenuPage(MainMenuPage.Root, "main-options"));
                 break;
 
             case MainMenuPage.MusicVolume:
                 AddVolumeItems(items, gameMenu, true);
-                AddAction(items, "main-music-back", "返回选项",
+                AddMenuAction(items, "main-music-back", "返回参数设置",
                     () => OpenMainMenuPage(MainMenuPage.Options, "main-music-volume"));
                 break;
 
             case MainMenuPage.SfxVolume:
                 AddVolumeItems(items, gameMenu, false);
-                AddAction(items, "main-sfx-back", "返回选项",
+                AddMenuAction(items, "main-sfx-back", "返回参数设置",
                     () => OpenMainMenuPage(MainMenuPage.Options, "main-sfx-volume"));
                 break;
 
@@ -1112,7 +1244,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                     foreach (TextAdventureGameSO game in manager.AvailableGames)
                     {
                         TextAdventureGameSO currentGame = game;
-                        AddAction(items, $"catalog-game-{currentGame.gameId}", currentGame.displayName, () =>
+                        AddMenuAction(items, $"catalog-game-{currentGame.gameId}", currentGame.displayName, () =>
                         {
                             bool selected = manager.SelectGame(currentGame);
                             if (selected)
@@ -1125,17 +1257,67 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                         });
                     }
                 }
-                AddAction(items, "main-options", "选项",
+                AddMenuAction(items, "main-options", "参数设置",
                     () => OpenMainMenuPage(MainMenuPage.Options));
-                AddAction(items, "main-quit", "退出应用", () =>
+                AddMenuAction(items, "main-quit", "返回游戏大厅", () =>
                 {
-                    gameMenu.QuitGame();
-                    return true;
+                    bool requested = gameMenu.TryReturnToLobby();
+                    if (!requested)
+                    {
+                        pendingAnnouncement = "当前未连接游戏大厅";
+#if UNITY_EDITOR
+                        previewStatus = pendingAnnouncement;
+#endif
+                        QueueRefresh();
+                    }
+                    return requested;
                 });
                 break;
         }
 
         return items;
+    }
+
+    private void AddAudioToggle(ICollection<Item> items, GameMenu gameMenu, bool music)
+    {
+        soundManager audio = soundManager.Instance;
+        bool enabled = music ? audio.IsMusicEnabled : audio.IsSfxEnabled;
+        string key = music ? "main-music-enabled" : "main-sfx-enabled";
+        items.Add(new Item
+        {
+            key = key,
+            label = music ? "音乐" : "音效",
+            value = enabled ? "已开启" : "已关闭",
+            role = AccessibilityRole.Toggle,
+            state = enabled ? AccessibilityState.Selected : AccessibilityState.None,
+            activate = () =>
+            {
+                bool nextEnabled = music
+                    ? !soundManager.Instance.IsMusicEnabled
+                    : !soundManager.Instance.IsSfxEnabled;
+                if (music)
+                {
+                    gameMenu.ChangeMusicEnabled(nextEnabled);
+                    soundManager.Instance.PlaySFX("Selected");
+                }
+                else
+                {
+                    if (!nextEnabled)
+                    {
+                        soundManager.Instance.PlaySFX("Selected");
+                    }
+                    gameMenu.ChangeSFXEnabled(nextEnabled);
+                    if (nextEnabled)
+                    {
+                        soundManager.Instance.PlaySFX("Selected");
+                    }
+                }
+
+                pendingFocusKey = key;
+                QueueRefresh();
+                return true;
+            }
+        });
     }
 
     private void AddVolumeItems(ICollection<Item> items, GameMenu gameMenu, bool music)
@@ -1166,6 +1348,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                         gameMenu.ChangeSFXVolume(volume);
                     }
 
+                    soundManager.Instance?.PlaySFX("Selected");
                     pendingFocusKey = key;
                     QueueRefresh();
                     return true;
@@ -1222,6 +1405,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private string GetPortraitTitle()
     {
         GameManager gameManager = GameManager.Instance;
+        if (gameManager != null && gameManager.IsInkStoryMode &&
+            gameManager.CurrentInkStoryPage != null)
+        {
+            return gameManager.CurrentInkStoryPage.title;
+        }
+
         if (gameManager != null && gameManager.IsTextStoryMode &&
             gameManager.CurrentTextStoryPage != null)
         {
@@ -1264,14 +1453,14 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
             {
                 case MainMenuPage.GameActions:
                     return gameManager == null ? "游戏" : gameManager.DisplayName;
+                case MainMenuPage.Options:
+                    return "参数设置";
                 case MainMenuPage.MusicVolume:
                     return "音乐音量";
                 case MainMenuPage.SfxVolume:
                     return "音效音量";
-                case MainMenuPage.Options:
-                    return "选项";
                 default:
-                    return "选择游戏";
+                    return "文字冒险屋";
             }
         }
 
@@ -1281,6 +1470,11 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private Sprite GetPortraitArtwork()
     {
         GameManager gameManager = GameManager.Instance;
+        if (gameManager != null && gameManager.IsInkStoryMode)
+        {
+            return null;
+        }
+
         if (gameManager != null && gameManager.IsTextStoryMode)
         {
             return gameManager.CurrentTextStoryPage?.artwork;
@@ -1426,6 +1620,15 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private static void AddAction(ICollection<Item> items, string key, string label, Func<bool> action)
     {
         items.Add(new Item { key = key, label = label, role = AccessibilityRole.Button, activate = action });
+    }
+
+    private static void AddMenuAction(ICollection<Item> items, string key, string label, Func<bool> action)
+    {
+        AddAction(items, key, label, () =>
+        {
+            soundManager.Instance?.PlaySFX("Selected");
+            return action();
+        });
     }
 
     private static string BuildSignature(IEnumerable<Item> items)

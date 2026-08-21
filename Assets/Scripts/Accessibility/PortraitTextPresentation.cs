@@ -81,7 +81,7 @@ public sealed class PortraitTextPresentation : MonoBehaviour
 
     public void Present(string pageTitle, Sprite currentArtwork, IReadOnlyList<Entry> entries)
     {
-        string resolvedTitle = string.IsNullOrWhiteSpace(pageTitle) ? "抓住未尽的余晖" : pageTitle;
+        string resolvedTitle = string.IsNullOrWhiteSpace(pageTitle) ? "文字冒险屋" : pageTitle;
         if (title.text != resolvedTitle)
         {
             title.text = resolvedTitle;

@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.inkle.ink-unity-integration": "https://github.com/inkle/ink-unity-integration.git?path=/Packages/com.inkle.ink-unity-integration#a0b734d906a6224050af7c4f39392fd9ba5988fe",
     "com.unity.collab-proxy": "2.0.7",
     "com.unity.feature.2d": "2.0.0",
     "com.unity.ide.rider": "3.0.24",

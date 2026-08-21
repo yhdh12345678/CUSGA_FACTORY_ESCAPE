@@ -11,6 +11,7 @@ public static class FactoryEscapeAccessibilityPreview
 {
     private const string StartScenePath = "Assets/Scenes/LoadScene.unity";
     private static double nextCheckTime;
+    private static double previewEnabledAt;
     private static bool previewWasEnabled;
     private static bool launchAttempted;
 
@@ -61,11 +62,15 @@ public static class FactoryEscapeAccessibilityPreview
             return;
         }
 
+        if (!previewWasEnabled)
+        {
+            previewEnabledAt = EditorApplication.timeSinceStartup;
+        }
         previewWasEnabled = true;
         AssistiveSupport.screenReaderStatusOverride =
             AssistiveSupport.ScreenReaderStatusOverride.ForceEnabled;
 
-        if (!launchAttempted)
+        if (!launchAttempted && EditorApplication.timeSinceStartup - previewEnabledAt >= 1d)
         {
             launchAttempted = true;
             LaunchPreviewer();
@@ -92,6 +97,11 @@ public static class FactoryEscapeAccessibilityPreview
 
     private static void LaunchPreviewer()
     {
+        if (File.Exists(GetPreviewPath("unified-editor")))
+        {
+            return;
+        }
+
         string assemblyPath = Path.Combine(
             GetProjectRoot(), "Tools", "AccessibilityPreviewer", "bin", "Release",
             "net8.0-windows", "AccessibilityPreviewer.dll");

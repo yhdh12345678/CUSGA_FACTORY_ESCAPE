@@ -112,6 +112,10 @@ public class GameMenu : SingletonMonobehaviour<GameMenu>
 
         AwaitingNewGameConfirmation = false;
         GameManager.Instance.StartNewGame();
+        if (GameManager.Instance.IsDarkRoomMode)
+        {
+            return GameManager.Instance.LaunchDarkRoom();
+        }
         GameManager.Instance.StartChangeSceneCoroutine("MainMenu","GameScene",GameState.Generating);
         return true;
     }
@@ -122,9 +126,14 @@ public class GameMenu : SingletonMonobehaviour<GameMenu>
         return true;
     }
 
-    public void QuitGame()
+    public void ReturnToLobby()
     {
-        Application.Quit();
+        TryReturnToLobby();
+    }
+
+    public bool TryReturnToLobby()
+    {
+        return GameLobbyReturnBridge.TryReturn("factory_escape_main_menu");
     }
 
     public void ContinueFromMain(Node targetNode)
@@ -149,6 +158,11 @@ public class GameMenu : SingletonMonobehaviour<GameMenu>
                 NoGameArchive(targetNode);
             }
             return false;
+        }
+
+        if (GameManager.Instance.IsDarkRoomMode)
+        {
+            return GameManager.Instance.LaunchDarkRoom();
         }
 
         GameManager.Instance.ChangeAndLoadGameScene("MainMenu");
@@ -183,6 +197,16 @@ public class GameMenu : SingletonMonobehaviour<GameMenu>
     public void ChangeSFXVolume(float volume)
     {
         soundManager.Instance.setSfxVolume(volume);
+    }
+
+    public void ChangeMusicEnabled(bool enabled)
+    {
+        soundManager.Instance.setMusicEnabled(enabled);
+    }
+
+    public void ChangeSFXEnabled(bool enabled)
+    {
+        soundManager.Instance.setSfxEnabled(enabled);
     }
 
     private void NoGameArchive(Node currentNode)

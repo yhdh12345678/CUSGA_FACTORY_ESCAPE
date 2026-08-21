@@ -13,6 +13,9 @@ public class soundManager : SingletonMonobehaviour<soundManager>
     public float totalVolume=1f;
     public float currentMusicVolume;
     public float currentSFXVolume;
+    public string LastPlayedSfxName { get; private set; } = string.Empty;
+    public bool IsMusicEnabled => musicSource != null && !musicSource.mute;
+    public bool IsSfxEnabled => sfxSource != null && !sfxSource.mute;
 
     protected override void Awake()
     {
@@ -42,6 +45,16 @@ public class soundManager : SingletonMonobehaviour<soundManager>
         currentSFXVolume = volume;
     }
 
+    public void setMusicEnabled(bool enabled)
+    {
+        musicSource.mute = !enabled;
+    }
+
+    public void setSfxEnabled(bool enabled)
+    {
+        sfxSource.mute = !enabled;
+    }
+
     public void PlayMusic(string name,bool loop = true)
     {
         Debug.Log("play");
@@ -56,7 +69,10 @@ public class soundManager : SingletonMonobehaviour<soundManager>
             if (musicSource.clip != s.clip)
             {
                 musicSource.clip = s.clip;
-                musicSource.Play();    
+            }
+            if (!musicSource.isPlaying)
+            {
+                musicSource.Play();
             }
         }
     }
@@ -70,6 +86,7 @@ public class soundManager : SingletonMonobehaviour<soundManager>
         }
         else
         {
+            LastPlayedSfxName = name;
             sfxSource.PlayOneShot(s.clip);
         }
     }
@@ -85,10 +102,11 @@ public class soundManager : SingletonMonobehaviour<soundManager>
         if (musicSource.clip != music)
         {
             musicSource.clip = music;
-            musicSource.Play();    
         }
-        
-        
+        if (!musicSource.isPlaying)
+        {
+            musicSource.Play();
+        }
     }
 
     //渐强播放音乐

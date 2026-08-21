@@ -15,3 +15,5 @@ MonoBehaviour:
   schemaVersion: 1
   games:
   - {fileID: 11400000, guid: 77217dcf172733e4eaa936eeb7964f03, type: 2}
+  - {fileID: 11400000, guid: a441bb5215e9e734c82cec5a1e05dbc3, type: 2}
+  - {fileID: 11400000, guid: 97e9521c763f4e67bb66e99ee6bb68ff, type: 2}

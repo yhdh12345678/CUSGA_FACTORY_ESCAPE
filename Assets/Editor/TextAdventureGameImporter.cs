@@ -12,6 +12,7 @@ public static class TextAdventureGameImporter
     private const string GeneratedDirectory = "Assets/GameContent/Generated";
     private const string CurrentGameAssetPath = "Assets/GameContent/CurrentGame.asset";
     private const string CatalogAssetPath = "Assets/GameContent/GameCatalog.asset";
+    private const string TheInterceptAssetPath = "Assets/GameContent/TheIntercept/TheIntercept.asset";
 
     [Serializable]
     private sealed class ImportDocument
@@ -255,6 +256,64 @@ public static class TextAdventureGameImporter
         EditorSceneManager.SaveScene(scene);
         AssetDatabase.SaveAssets();
         Debug.Log($"当前游戏已接入子游戏目录：levels={game.legacyLevels.Count}; catalog={catalog.games.Count}");
+    }
+
+    [MenuItem("工具/文字游戏/创建密电疑云定义")]
+    public static void CreateTheInterceptDefinition()
+    {
+        const string inkPath = "Assets/GameContent/TheIntercept/TheIntercept.zh-CN.ink";
+        Ink.UnityIntegration.InkImporter inkImporter =
+            AssetImporter.GetAtPath(inkPath) as Ink.UnityIntegration.InkImporter;
+        if (inkImporter != null && !inkImporter.ShouldCompile)
+        {
+            var importerSettings = new SerializedObject(inkImporter);
+            importerSettings.FindProperty("compileAsMasterFileOverride").boolValue = true;
+            importerSettings.ApplyModifiedPropertiesWithoutUndo();
+            inkImporter.SaveAndReimport();
+        }
+
+        Ink.UnityIntegration.InkFile source =
+            AssetDatabase.LoadAssetAtPath<Ink.UnityIntegration.InkFile>(
+                inkPath);
+        TextAsset license = AssetDatabase.LoadAssetAtPath<TextAsset>(
+            "Assets/GameContent/TheIntercept/LICENSE-TheIntercept.txt");
+        if (source == null || license == null)
+        {
+            throw new FileNotFoundException("《密电疑云》的 Ink 源文件或 MIT 许可文件不存在。");
+        }
+
+        TextAdventureGameSO game =
+            AssetDatabase.LoadAssetAtPath<TextAdventureGameSO>(TheInterceptAssetPath);
+        if (game == null)
+        {
+            game = ScriptableObject.CreateInstance<TextAdventureGameSO>();
+            AssetDatabase.CreateAsset(game, TheInterceptAssetPath);
+        }
+
+        game.schemaVersion = TextAdventureGameSO.CurrentSchemaVersion;
+        game.gameId = "the-intercept";
+        game.displayName = "密电疑云";
+        game.protagonistName = "曼宁";
+        game.mode = TextAdventureGameMode.InkStory;
+        game.saveProfileNameOverride = string.Empty;
+        game.inkStory.source = source;
+        game.inkStory.defaultTitle = "密电疑云";
+        game.inkStory.defaultVisualDescription =
+            "1942年的布莱切利园。十四号小屋里，曼宁独自等待审讯。";
+        game.sourceAttribution =
+            "原作：inkle《The Intercept》。本版本为非官方中文无障碍改编；原作与剧情脚本依据 MIT 许可证使用。";
+        game.licenseDocument = license;
+        EditorUtility.SetDirty(game);
+
+        List<string> errors = TextAdventureGameValidator.Validate(game);
+        if (errors.Count > 0)
+        {
+            throw new InvalidDataException(string.Join("\n", errors));
+        }
+
+        AddDefinitionToCatalog(game);
+        Selection.activeObject = game;
+        Debug.Log($"《密电疑云》已接入子游戏目录：gameId={game.gameId}");
     }
 
     public static void ImportFromEnvironment()

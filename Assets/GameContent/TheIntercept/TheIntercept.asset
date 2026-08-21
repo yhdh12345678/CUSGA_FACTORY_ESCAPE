@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8cd204a951e99a49ab30d5c0043825d, type: 3}
+  m_Name: TheIntercept
+  m_EditorClassIdentifier: Assembly-CSharp::TextAdventureGameSO
+  schemaVersion: 1
+  gameId: the-intercept
+  displayName: "\u5BC6\u7535\u7591\u4E91"
+  protagonistName: "\u66FC\u5B81"
+  mode: 2
+  saveProfileNameOverride: 
+  story:
+    firstPageId: 
+    chapters: []
+    pages: []
+  inkStory:
+    source: {fileID: 6231892579173505729, guid: 1e231236fb7769b43b1908e5f2d6a46b, type: 3}
+    defaultTitle: "\u5BC6\u7535\u7591\u4E91"
+    defaultVisualDescription: "1942\u5E74\u7684\u5E03\u83B1\u5207\u5229\u56ED\u3002\u5341\u56DB\u53F7\u5C0F\u5C4B\u91CC\uFF0C\u66FC\u5B81\u72EC\u81EA\u7B49\u5F85\u5BA1\u8BAF\u3002"
+  sourceAttribution: "\u539F\u4F5C\uFF1Ainkle\u300AThe Intercept\u300B\u3002\u672C\u7248\u672C\u4E3A\u975E\u5B98\u65B9\u4E2D\u6587\u65E0\u969C\u788D\u6539\u7F16\uFF1B\u539F\u4F5C\u4E0E\u5267\u60C5\u811A\u672C\u4F9D\u636E
+    MIT \u8BB8\u53EF\u8BC1\u4F7F\u7528\u3002"
+  licenseDocument: {fileID: 4900000, guid: e4e0746642b280247bcb14d7e0821001, type: 3}
+  legacyLevels: []
+  skyUiLevelIndex: -1
+  primaryEnding: []
+  alternateEnding: []

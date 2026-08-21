@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using Ink.UnityIntegration;
 using UnityEngine;
 
 public enum TextAdventureGameMode
 {
     LegacyNodeAdventure,
-    TextStory
+    TextStory,
+    InkStory,
+    DarkRoom
 }
 
 [CreateAssetMenu(
@@ -28,6 +31,13 @@ public sealed class TextAdventureGameSO : ScriptableObject
     [Header("通用文字剧情")]
     public TextAdventureStory story = new TextAdventureStory();
 
+    [Header("Ink 文字剧情")]
+    public InkAdventureStory inkStory = new InkAdventureStory();
+
+    [Header("来源与许可")]
+    [TextArea(2, 6)] public string sourceAttribution;
+    public TextAsset licenseDocument;
+
     [Header("原作节点模式兼容")]
     public List<NodeLevelSO> legacyLevels = new List<NodeLevelSO>();
     public int skyUiLevelIndex = -1;
@@ -39,6 +49,15 @@ public sealed class TextAdventureGameSO : ScriptableObject
         : string.IsNullOrWhiteSpace(gameId)
             ? "GameProgress"
             : $"GameProgress_{gameId.Trim()}";
+
+}
+
+[Serializable]
+public sealed class InkAdventureStory
+{
+    public InkFile source;
+    public string defaultTitle;
+    [TextArea(2, 6)] public string defaultVisualDescription;
 }
 
 [Serializable]
@@ -121,8 +140,49 @@ public static class TextAdventureGameValidator
             return errors;
         }
 
+        if (game.mode == TextAdventureGameMode.InkStory)
+        {
+            ValidateInkStory(game.inkStory, errors);
+            return errors;
+        }
+
+        if (game.mode == TextAdventureGameMode.DarkRoom)
+        {
+            if (string.IsNullOrWhiteSpace(game.sourceAttribution))
+            {
+                errors.Add("暗黑房间必须保留来源归属。");
+            }
+            if (game.licenseDocument == null)
+            {
+                errors.Add("暗黑房间必须附带许可证文档。");
+            }
+            return errors;
+        }
+
         ValidateStory(game.story, errors);
         return errors;
+    }
+
+    private static void ValidateInkStory(InkAdventureStory story, ICollection<string> errors)
+    {
+        if (story?.source == null)
+        {
+            errors.Add("Ink 剧情源不能为空。");
+        }
+        else if (!story.source.isCompiled)
+        {
+            errors.Add("Ink 剧情源尚未成功编译。");
+        }
+
+        if (string.IsNullOrWhiteSpace(story?.defaultTitle))
+        {
+            errors.Add("Ink 剧情默认标题不能为空。");
+        }
+
+        if (string.IsNullOrWhiteSpace(story?.defaultVisualDescription))
+        {
+            errors.Add("Ink 剧情默认画面描述不能为空。");
+        }
     }
 
     private static void ValidateStory(TextAdventureStory story, List<string> errors)

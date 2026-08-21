@@ -3,6 +3,8 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $projectFile = Join-Path $PSScriptRoot 'AccessibilityPreviewer.csproj'
 $previewerPath = Join-Path $PSScriptRoot 'bin\Release\net8.0-windows\AccessibilityPreviewer.dll'
 $systemDotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+$audioRestoreScript = (Resolve-Path -LiteralPath (
+    Join-Path $PSScriptRoot '..\..\..\Tools\WindowsAudio\Restore-UnityAudio.ps1')).Path
 
 $sourceTime = (Get-ChildItem -LiteralPath $PSScriptRoot -File |
     Where-Object { $_.Extension -in '.cs', '.csproj' } |
@@ -39,7 +41,11 @@ if (-not $clientRunning) {
 $runningEditor = Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'" |
     Where-Object { $_.CommandLine -and $_.CommandLine.Contains($projectRoot, [StringComparison]::OrdinalIgnoreCase) } |
     Select-Object -First 1
-if (-not $runningEditor) {
+if ($runningEditor) {
+    & $audioRestoreScript -UnityPath $runningEditor.ExecutablePath `
+        -TargetProcessId ([uint32]$runningEditor.ProcessId) | Out-Null
+}
+else {
     $versionLine = Get-Content -LiteralPath (Join-Path $projectRoot 'ProjectSettings\ProjectVersion.txt') |
         Where-Object { $_ -like 'm_EditorVersion:*' } |
         Select-Object -First 1
@@ -66,5 +72,9 @@ if (-not $runningEditor) {
         throw "找不到项目所需的 Unity $version。"
     }
 
-    Start-Process -FilePath $unityPath -ArgumentList @('-projectPath', $projectRoot)
+    & $audioRestoreScript -UnityPath $unityPath | Out-Null
+    $unityProcess = Start-Process -FilePath $unityPath `
+        -ArgumentList @('-projectPath', $projectRoot) -PassThru
+    & $audioRestoreScript -UnityPath $unityPath `
+        -TargetProcessId ([uint32]$unityProcess.Id) | Out-Null
 }

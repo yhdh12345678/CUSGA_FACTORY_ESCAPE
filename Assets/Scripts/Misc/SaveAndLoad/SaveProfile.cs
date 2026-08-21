@@ -49,3 +49,11 @@ public record TextStoryProgressState : SaveProfileData
     public string gameId;
     public string pageId;
 }
+
+public record InkStoryProgressState : SaveProfileData
+{
+    public int version;
+    public string gameId;
+    public string storyStateJson;
+    public InkAdventurePage page;
+}

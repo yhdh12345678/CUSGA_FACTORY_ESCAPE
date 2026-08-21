@@ -24,6 +24,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 {
     private const int SaveVersion = 2;
     private const int TextStorySaveVersion = 1;
+    private const int InkStorySaveVersion = 1;
     private const string ProgressProfileName = "GameProgress";
 
     [Header("游戏内容")]
@@ -32,6 +33,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
     [Tooltip("当前选中的子游戏；启动时默认使用目录第一项")]
     public TextAdventureGameSO gameDefinition;
     private TextAdventureSession textStorySession;
+    private InkAdventureSession inkStorySession;
 
     [Header("AI参数")]
     [Tooltip("AI当前焦虑值")]
@@ -135,6 +137,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         }
 
         textStorySession = null;
+        inkStorySession = null;
     }
 
     private void InitializeGameCatalog()
@@ -182,10 +185,16 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
     public bool IsTextStoryMode => gameDefinition != null &&
         gameDefinition.mode == TextAdventureGameMode.TextStory;
+    public bool IsInkStoryMode => gameDefinition != null &&
+        gameDefinition.mode == TextAdventureGameMode.InkStory;
+    public bool IsDarkRoomMode => gameDefinition != null &&
+        gameDefinition.mode == TextAdventureGameMode.DarkRoom;
+    public bool IsNarrativeStoryMode => IsTextStoryMode || IsInkStoryMode;
     public string DisplayName => string.IsNullOrWhiteSpace(gameDefinition?.displayName)
         ? "抓住未尽的余晖"
         : gameDefinition.displayName;
     public TextAdventurePage CurrentTextStoryPage => textStorySession?.CurrentPage;
+    public InkAdventurePage CurrentInkStoryPage => inkStorySession?.CurrentPage;
     private int SkyUiLevelIndex => gameDefinition != null &&
         gameDefinition.mode == TextAdventureGameMode.LegacyNodeAdventure
             ? gameDefinition.skyUiLevelIndex
@@ -202,7 +211,9 @@ public class GameManager : SingletonMonobehaviour<GameManager>
     private string ActiveProgressProfileName => gameDefinition == null
         ? ProgressProfileName
         : gameDefinition.SaveProfileName;
-    public bool HasSavedGame => SaveManager.Exists(ActiveProgressProfileName);
+    public bool HasSavedGame => IsDarkRoomMode
+        ? DarkRoomApp.HasSavedGame
+        : SaveManager.Exists(ActiveProgressProfileName);
     public bool IsSaveAndQuitStarted => saveAndQuitStarted;
     public bool IsSceneTransitionInProgress => sceneTransitionInProgress;
 
@@ -226,6 +237,28 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
     public void StartNewGame()
     {
+        if (IsDarkRoomMode)
+        {
+            DarkRoomApp.DeleteSavedGame();
+            gameState = GameState.Start;
+            restoredFromSave = false;
+            return;
+        }
+
+        if (IsInkStoryMode)
+        {
+            SaveManager.Delete(gameDefinition.SaveProfileName);
+            inkStorySession = CreateInkStorySession();
+            if (!inkStorySession.Start(out string storyError))
+            {
+                Debug.LogError(storyError);
+                Announce(storyError);
+            }
+            gameState = GameState.Start;
+            restoredFromSave = false;
+            return;
+        }
+
         if (IsTextStoryMode)
         {
             SaveManager.Delete(gameDefinition.SaveProfileName);
@@ -256,6 +289,17 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
     public bool TryLoadSavedGame(out string errorMessage)
     {
+        if (IsDarkRoomMode)
+        {
+            errorMessage = HasSavedGame ? string.Empty : "没有可继续的游戏";
+            return HasSavedGame;
+        }
+
+        if (IsInkStoryMode)
+        {
+            return TryLoadInkStory(out errorMessage);
+        }
+
         if (IsTextStoryMode)
         {
             return TryLoadTextStory(out errorMessage);
@@ -326,6 +370,27 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         return true;
     }
 
+    public bool LaunchDarkRoom()
+    {
+        if (!IsDarkRoomMode || DarkRoomApp.Instance != null)
+        {
+            return false;
+        }
+
+        soundManager.Instance?.StopMusic();
+        FactoryEscapeAccessibility.EnterEmbeddedGame();
+        DarkRoomApp.Launch(ReturnFromDarkRoom);
+        gameState = GameState.Playing;
+        return true;
+    }
+
+    private void ReturnFromDarkRoom()
+    {
+        gameState = GameState.Start;
+        FactoryEscapeAccessibility.ExitEmbeddedGame("进度已保存");
+        soundManager.Instance?.PlayMusicInFade("Theme");
+    }
+
     public bool ChooseTextStory(string choiceId)
     {
         string errorMessage = "剧情尚未准备好";
@@ -338,6 +403,53 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
         FactoryEscapeAccessibility.RefreshScreen("story-description");
         return true;
+    }
+
+    public bool ChooseInkStory(int choiceIndex)
+    {
+        string errorMessage = "剧情尚未准备好";
+        if (!IsInkStoryMode || inkStorySession == null ||
+            !inkStorySession.Choose(choiceIndex, out errorMessage))
+        {
+            Announce(errorMessage ?? "剧情尚未准备好");
+            return false;
+        }
+
+        soundManager.Instance?.PlaySFX("Selected");
+        FactoryEscapeAccessibility.RefreshScreen("story-description");
+        return true;
+    }
+
+    private bool TryLoadInkStory(out string errorMessage)
+    {
+        IReadOnlyList<SaveProfile<InkStoryProgressState>> candidates =
+            SaveManager.LoadCandidates<InkStoryProgressState>(gameDefinition.SaveProfileName);
+        foreach (SaveProfile<InkStoryProgressState> candidate in candidates)
+        {
+            InkStoryProgressState save = candidate.saveData;
+            if (save == null || save.version != InkStorySaveVersion ||
+                save.gameId != gameDefinition.gameId)
+            {
+                continue;
+            }
+
+            InkAdventureSession session = CreateInkStorySession();
+            if (!session.Restore(save.storyStateJson, save.page, out errorMessage))
+            {
+                continue;
+            }
+
+            inkStorySession = session;
+            gameState = GameState.Playing;
+            restoredFromSave = true;
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        errorMessage = HasSavedGame
+            ? "存档损坏，无法继续游戏"
+            : "没有可继续的游戏";
+        return false;
     }
 
     private bool TryLoadTextStory(out string errorMessage)
@@ -559,6 +671,11 @@ public class GameManager : SingletonMonobehaviour<GameManager>
 
     private bool TrySaveCurrentProgress(out string errorMessage)
     {
+        if (IsInkStoryMode)
+        {
+            return TrySaveInkStoryProgress(out errorMessage);
+        }
+
         if (IsTextStoryMode)
         {
             return TrySaveTextStoryProgress(out errorMessage);
@@ -673,6 +790,38 @@ public class GameManager : SingletonMonobehaviour<GameManager>
                 pageId = textStorySession.CurrentPage.id
             };
             SaveManager.SaveOrReplace(new SaveProfile<TextStoryProgressState>(
+                gameDefinition.SaveProfileName,
+                progress));
+            errorMessage = string.Empty;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception);
+            errorMessage = "存档失败，游戏没有退出";
+            return false;
+        }
+    }
+
+    private bool TrySaveInkStoryProgress(out string errorMessage)
+    {
+        if (!SceneManager.GetSceneByName("GameScene").isLoaded ||
+            gameState != GameState.Playing || inkStorySession?.CurrentPage == null)
+        {
+            errorMessage = "当前进度暂时无法保存";
+            return false;
+        }
+
+        try
+        {
+            var progress = new InkStoryProgressState
+            {
+                version = InkStorySaveVersion,
+                gameId = gameDefinition.gameId,
+                storyStateJson = inkStorySession.GetStateJson(),
+                page = inkStorySession.CurrentPage
+            };
+            SaveManager.SaveOrReplace(new SaveProfile<InkStoryProgressState>(
                 gameDefinition.SaveProfileName,
                 progress));
             errorMessage = string.Empty;
@@ -821,6 +970,25 @@ public class GameManager : SingletonMonobehaviour<GameManager>
             case GameState.Start:
                 break;
             case GameState.Generating:
+                if (IsInkStoryMode)
+                {
+                    if (inkStorySession == null)
+                    {
+                        inkStorySession = CreateInkStorySession();
+                        if (!inkStorySession.Start(out string errorMessage))
+                        {
+                            Debug.LogError(errorMessage);
+                            Announce(errorMessage);
+                            break;
+                        }
+                    }
+
+                    gameState = GameState.Playing;
+                    PlayCommonNarrativeMusic();
+                    FactoryEscapeAccessibility.RefreshScreen("story-description");
+                    break;
+                }
+
                 if (IsTextStoryMode)
                 {
                     if (textStorySession == null)
@@ -834,6 +1002,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
                     }
 
                     gameState = GameState.Playing;
+                    PlayCommonNarrativeMusic();
                     FactoryEscapeAccessibility.RefreshScreen("story-description");
                     break;
                 }
@@ -1171,7 +1340,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         canvasGroup.blocksRaycasts = true;
         yield return StartCoroutine(Fade(0,1,0.8f,Color.black));
 
-        if (!IsTextStoryMode)
+        if (!IsNarrativeStoryMode)
         {
             NodeMapBuilder.Instance.SaveNodeMap(nodeIdsInGraph[graphIndex]);
         }
@@ -1231,9 +1400,10 @@ public class GameManager : SingletonMonobehaviour<GameManager>
             soundManager.Instance.StopMusicInFade();
             soundManager.Instance.PlaySFX("ChangeScene");
 
-            if (IsTextStoryMode)
+            if (IsNarrativeStoryMode)
             {
                 gameState = GameState.Playing;
+                PlayCommonNarrativeMusic();
                 FactoryEscapeAccessibility.RefreshScreen("story-description");
             }
             else
@@ -1287,6 +1457,20 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         // 根据读取的节点状态数据重新载入节点图
         if (enterNodeGraphTimesList[graphIndex] != 1)
             NodeMapBuilder.Instance.LoadNodeMap(nodeIdsInGraph[graphIndex]);
+    }
+
+    private InkAdventureSession CreateInkStorySession()
+    {
+        InkAdventureStory definition = gameDefinition.inkStory;
+        return new InkAdventureSession(
+            definition.source.storyJson,
+            definition.defaultTitle,
+            definition.defaultVisualDescription);
+    }
+
+    private static void PlayCommonNarrativeMusic()
+    {
+        soundManager.Instance?.PlayMusicInFade("Theme");
     }
 
 

@@ -17,6 +17,39 @@ using TMPro;
 public sealed class AccessibilitySmokeTests
 {
     [Test]
+    public void DarkRoomInvestigationReportsResultReturnTargetAndEventCue()
+    {
+        Type stateType = Type.GetType("DarkRoomGameState, Assembly-CSharp");
+        Type saveType = Type.GetType("DarkRoomSaveData, Assembly-CSharp");
+        Assert.That(stateType, Is.Not.Null);
+        Assert.That(saveType, Is.Not.Null);
+        object saveData = Activator.CreateInstance(saveType);
+        saveType.GetField("wood").SetValue(saveData, 100);
+        saveType.GetField("woodUnlocked").SetValue(saveData, true);
+        saveType.GetField("randomState").SetValue(saveData, 1);
+        object state = Activator.CreateInstance(stateType, new[] { saveData });
+        string audioKey = string.Empty;
+        Action<string> captureAudio = key => audioKey = key;
+        stateType.GetEvent("AudioRequested").AddEventHandler(state, captureAudio);
+
+        Assert.That((bool)stateType.GetMethod("TryStartRoomEvent")
+            .Invoke(state, new object[] { "noises-outside" }), Is.True);
+        Assert.That(audioKey, Is.EqualTo("event-noises-outside"));
+        Assert.That((bool)stateType.GetMethod("ActivateEventChoice")
+            .Invoke(state, new object[] { "event-choice-investigate" }), Is.True);
+
+        object result = stateType.GetMethod("GetCurrentEvent").Invoke(state, null);
+        Type resultType = result.GetType();
+        string resultText = (string)resultType.GetField("Text").GetValue(result);
+        Assert.That(resultText, Does.Contain("结果："));
+        Assert.That(resultText, Does.Contain("没有获得或损失物品"));
+        IEnumerable choices = (IEnumerable)resultType.GetField("Choices").GetValue(result);
+        object returnChoice = choices.Cast<object>().Single();
+        Assert.That(returnChoice.GetType().GetField("Label").GetValue(returnChoice),
+            Is.EqualTo("返回房间"));
+    }
+
+    [Test]
     public void SystemChineseFontUsesDynamicAtlasAndEmbeddedFallback()
     {
         TMP_FontAsset font = GetSystemChineseFont();
@@ -37,12 +70,15 @@ public sealed class AccessibilitySmokeTests
         Assert.That(fallback, Is.Not.Null, "必须保留最小动态中文后备字体。");
         Assert.That(fallback.atlasPopulationMode, Is.EqualTo(AtlasPopulationMode.Dynamic));
         Assert.That(fallback.sourceFontFile, Is.Not.Null);
-        Assert.That(font.HasCharacters("抓住未尽的余晖小明车间继续游戏存档退出"), Is.True,
+        Assert.That(font.HasCharacters("抓住未尽的余晖暗黑房间小明车间继续游戏存档退出"), Is.True,
             "当前字体链必须保留已经生成的关键中文字符。");
         Assert.That(fallback.sourceFontFile.HasCharacter('接'), Is.True,
             "动态后备字体源必须覆盖项目中文字符。");
         Assert.That(fallback.sourceFontFile.HasCharacter('口'), Is.True,
             "动态后备字体源必须覆盖项目中文字符。");
+        Assert.That("密电疑云来源许可".All(character =>
+                fallback.sourceFontFile.HasCharacter(character)), Is.True,
+            "动态后备字体源必须覆盖《密电疑云》的目录和许可页文字。");
     }
 
     [Test]
@@ -100,9 +136,9 @@ public sealed class AccessibilitySmokeTests
         for (int frame = 0; frame < 120; frame++)
         {
             Transform currentRoot = (Transform)rootProperty.GetValue(presentation);
-            bool mainMenuReady = (int)entryCountProperty.GetValue(presentation) == 3 &&
-                                 currentRoot.GetComponentsInChildren<TMP_Text>(false)
-                                     .Any(text => text.text == "抓住未尽的余晖");
+            bool mainMenuReady = (int)entryCountProperty.GetValue(presentation) == 5 &&
+                                  currentRoot.GetComponentsInChildren<TMP_Text>(false)
+                                      .Any(text => text.text == "密电疑云");
             if (mainMenuReady)
             {
                 break;
@@ -116,11 +152,14 @@ public sealed class AccessibilitySmokeTests
         StringAssert.Contains("new Vector2(1080f, 2400f)", presentationSource);
         Transform presentationRoot = (Transform)rootProperty.GetValue(presentation);
         TMP_Text[] texts = presentationRoot.GetComponentsInChildren<TMP_Text>(false);
-        Assert.That((int)entryCountProperty.GetValue(presentation), Is.EqualTo(3),
-            $"游戏目录应显示子游戏、选项和退出应用。当前文字：{string.Join("|", texts.Select(text => text.text))}");
-        Assert.That(texts.Any(text => text.text == "选择游戏"), Is.True);
+        Assert.That((int)entryCountProperty.GetValue(presentation), Is.EqualTo(5),
+            $"游戏目录应显示三个子游戏、参数设置和返回游戏大厅。当前文字：{string.Join("|", texts.Select(text => text.text))}");
+        Assert.That(texts.Any(text => text.text == "文字冒险屋"), Is.True);
         Assert.That(texts.Any(text => text.text == "抓住未尽的余晖"), Is.True);
-        Assert.That(texts.Any(text => text.text == "退出应用"), Is.True);
+        Assert.That(texts.Any(text => text.text == "密电疑云"), Is.True);
+        Assert.That(texts.Any(text => text.text == "暗黑房间"), Is.True);
+        Assert.That(texts.Any(text => text.text == "参数设置"), Is.True);
+        Assert.That(texts.Any(text => text.text == "返回游戏大厅"), Is.True);
         Assert.That(texts.All(text => text.fontSize >= 38f), Is.True,
             "竖屏可见文字不得小于 38。 ");
         Assert.That(texts.All(text => text.font != null), Is.True,
@@ -673,7 +712,7 @@ public sealed class AccessibilitySmokeTests
             AccessibilityHierarchy current = AssistiveSupport.activeHierarchy;
             if (current != null &&
                 current.rootNodes.Select(node => node.label).SequenceEqual(
-                    new[] { "抓住未尽的余晖", "选项", "退出应用" }))
+                    new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "参数设置", "返回游戏大厅" }))
             {
                 break;
             }
@@ -685,7 +724,7 @@ public sealed class AccessibilitySmokeTests
         Assert.That(hierarchy, Is.Not.Null, "启用读屏后应创建无障碍层级。");
         Assert.That(
             hierarchy.rootNodes.Select(node => node.label),
-            Is.EqualTo(new[] { "抓住未尽的余晖", "选项", "退出应用" }),
+            Is.EqualTo(new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "参数设置", "返回游戏大厅" }),
             "入口应先暴露子游戏目录，再进入具体游戏的开始和继续操作。");
         Assert.That(
             hierarchy.rootNodes.All(node => node.role == AccessibilityRole.Button),
@@ -720,7 +759,7 @@ public sealed class AccessibilitySmokeTests
                 $"节点“{node.label}”不应重复播报激活方式。");
         }
 
-        AccessibilityNode optionsNode = hierarchy.rootNodes.Single(node => node.label == "选项");
+        AccessibilityNode optionsNode = hierarchy.rootNodes.Single(node => node.label == "参数设置");
         Assert.That(((Func<bool>)invokedField.GetValue(optionsNode)).Invoke(), Is.True);
 
         for (int frame = 0; frame < 30; frame++)
@@ -735,11 +774,75 @@ public sealed class AccessibilitySmokeTests
 
         Assert.That(
             AssistiveSupport.activeHierarchy.rootNodes.Select(node => node.label),
-            Is.EqualTo(new[] { "音乐音量", "音效音量", "返回游戏列表" }),
-            "激活选项后应进入可滑动操作的选项菜单。");
+            Is.EqualTo(new[] { "音乐音量", "音乐", "音效音量", "音效", "返回文字冒险屋" }),
+            "激活参数设置后应进入可滑动操作的设置菜单。");
+
+        object audioManager = FindGameComponent("soundManager");
+        Type audioManagerType = audioManager.GetType();
+        AudioSource musicSource = (AudioSource)audioManagerType.GetField("musicSource")
+            .GetValue(audioManager);
+        AudioSource sfxSource = (AudioSource)audioManagerType.GetField("sfxSource")
+            .GetValue(audioManager);
+        AccessibilityNode musicToggle = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "音乐");
+        AccessibilityNode sfxToggle = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "音效");
+        Assert.That(musicToggle.role, Is.EqualTo(AccessibilityRole.Toggle));
+        Assert.That(sfxToggle.role, Is.EqualTo(AccessibilityRole.Toggle));
+        Assert.That(musicToggle.value, Is.EqualTo("已开启"));
+        Assert.That(sfxToggle.value, Is.EqualTo("已开启"));
+        Assert.That(musicSource.mute, Is.False,
+            "只浏览音乐开关不得改变音乐状态。");
+        Assert.That(sfxSource.mute, Is.False,
+            "只浏览音效开关不得改变音效状态。");
+
+        Assert.That(((Func<bool>)invokedField.GetValue(musicToggle)).Invoke(), Is.True);
+        Assert.That(musicSource.mute, Is.True);
+        for (int frame = 0; frame < 30; frame++)
+        {
+            musicToggle = AssistiveSupport.activeHierarchy.rootNodes
+                .Single(node => node.label == "音乐");
+            if (musicToggle.value == "已关闭")
+            {
+                break;
+            }
+            yield return null;
+        }
+        Assert.That(musicToggle.value, Is.EqualTo("已关闭"));
+        Assert.That(((Func<bool>)invokedField.GetValue(musicToggle)).Invoke(), Is.True);
+        Assert.That(musicSource.mute, Is.False);
+
+        for (int frame = 0; frame < 30; frame++)
+        {
+            musicToggle = AssistiveSupport.activeHierarchy.rootNodes
+                .Single(node => node.label == "音乐");
+            if (musicToggle.value == "已开启")
+            {
+                break;
+            }
+            yield return null;
+        }
+        sfxToggle = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "音效");
+
+        Assert.That(((Func<bool>)invokedField.GetValue(sfxToggle)).Invoke(), Is.True);
+        Assert.That(sfxSource.mute, Is.True);
+        for (int frame = 0; frame < 30; frame++)
+        {
+            sfxToggle = AssistiveSupport.activeHierarchy.rootNodes
+                .Single(node => node.label == "音效");
+            if (sfxToggle.value == "已关闭")
+            {
+                break;
+            }
+            yield return null;
+        }
+        Assert.That(sfxToggle.value, Is.EqualTo("已关闭"));
+        Assert.That(((Func<bool>)invokedField.GetValue(sfxToggle)).Invoke(), Is.True);
+        Assert.That(sfxSource.mute, Is.False);
 
         AccessibilityNode backNode = AssistiveSupport.activeHierarchy.rootNodes
-            .Single(node => node.label == "返回游戏列表");
+            .Single(node => node.label == "返回文字冒险屋");
         Assert.That(((Func<bool>)invokedField.GetValue(backNode)).Invoke(), Is.True);
         for (int frame = 0; frame < 30; frame++)
         {
@@ -749,6 +852,31 @@ public sealed class AccessibilitySmokeTests
             }
 
             yield return null;
+        }
+
+        AccessibilityNode lobbyNode = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "返回游戏大厅");
+        Assert.That(((Func<bool>)invokedField.GetValue(lobbyNode)).Invoke(), Is.False,
+            "本机直启且未连接大厅宿主时不得伪装成已经返回，也不得退出应用。");
+
+        string returnReason = string.Empty;
+        Action<string> returnHandler = reason => returnReason = reason;
+        Type lobbyBridgeType = Type.GetType("GameLobbyReturnBridge, Assembly-CSharp");
+        Assert.That(lobbyBridgeType, Is.Not.Null, "游戏侧必须提供正式大厅返回请求桥。");
+        MethodInfo connectLobby = lobbyBridgeType.GetMethod("Connect", BindingFlags.Static | BindingFlags.Public);
+        MethodInfo disconnectLobby = lobbyBridgeType.GetMethod("Disconnect", BindingFlags.Static | BindingFlags.Public);
+        Assert.That(connectLobby, Is.Not.Null);
+        Assert.That(disconnectLobby, Is.Not.Null);
+        connectLobby.Invoke(null, new object[] { returnHandler });
+        try
+        {
+            Assert.That(((Func<bool>)invokedField.GetValue(lobbyNode)).Invoke(), Is.True,
+                "连接大厅宿主后应把显式激活动作交给正式返回通道。");
+            Assert.That(returnReason, Is.EqualTo("factory_escape_main_menu"));
+        }
+        finally
+        {
+            disconnectLobby.Invoke(null, new object[] { returnHandler });
         }
 
         AccessibilityNode gameNode = AssistiveSupport.activeHierarchy.rootNodes
@@ -766,12 +894,25 @@ public sealed class AccessibilitySmokeTests
 
         Assert.That(
             AssistiveSupport.activeHierarchy.rootNodes.Select(node => node.label),
-            Is.EqualTo(new[] { "开始游戏", "继续游戏", "返回游戏列表" }),
+            Is.EqualTo(new[] { "开始游戏", "继续游戏", "返回文字冒险屋" }),
             "选择子游戏后才应显示该游戏的开始、继续和返回操作。");
 
         AccessibilityNode startNode = AssistiveSupport.activeHierarchy.rootNodes
             .Single(node => node.label == "开始游戏");
         Assert.That(((Func<bool>)invokedField.GetValue(startNode)).Invoke(), Is.True);
+        for (int frame = 0; frame < 30 &&
+             !SceneManager.GetSceneByName("GameScene").isLoaded; frame++)
+        {
+            AccessibilityNode confirmNode = AssistiveSupport.activeHierarchy?.rootNodes
+                .FirstOrDefault(node => node.label == "确认重新开始");
+            if (confirmNode != null)
+            {
+                Assert.That(((Func<bool>)invokedField.GetValue(confirmNode)).Invoke(), Is.True);
+                break;
+            }
+
+            yield return null;
+        }
         float timeout = Time.realtimeSinceStartup + 5f;
         while (Time.realtimeSinceStartup < timeout)
         {
@@ -1192,6 +1333,409 @@ public sealed class AccessibilitySmokeTests
         }
     }
 
+    [UnityTest]
+    public IEnumerator FormalCatalogAlternatesIndependentSavesAndContinuesBothGames()
+    {
+        const string legacyProfile = "GameProgress";
+        const string inkProfile = "GameProgress_the-intercept";
+        Type saveManagerType = Type.GetType("SaveManager, Assembly-CSharp");
+        MethodInfo deleteSave = saveManagerType?.GetMethod("Delete");
+        MethodInfo saveExists = saveManagerType?.GetMethod("Exists");
+        Assert.That(deleteSave, Is.Not.Null);
+        Assert.That(saveExists, Is.Not.Null);
+        deleteSave.Invoke(null, new object[] { inkProfile });
+
+        AssistiveSupport.screenReaderStatusOverride =
+            AssistiveSupport.ScreenReaderStatusOverride.ForceEnabled;
+        DestroyExistingGameManager();
+        yield return SceneManager.LoadSceneAsync("LoadScene", LoadSceneMode.Single);
+
+        object legacyManager = null;
+        object legacyMenu = null;
+        for (int frame = 0; frame < 240; frame++)
+        {
+            legacyManager = FindGameComponent("GameManager");
+            legacyMenu = FindGameComponent("GameMenu");
+            if (legacyManager != null && legacyMenu != null)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        Assert.That(legacyManager, Is.Not.Null);
+        Assert.That(legacyMenu, Is.Not.Null);
+        Type legacyManagerType = legacyManager.GetType();
+        legacyManagerType.GetMethod("StartNewGame").Invoke(legacyManager, null);
+        Assert.That((bool)saveExists.Invoke(null, new object[] { legacyProfile }), Is.False,
+            "测试开始前应清理旧游戏的总进度和代次节点存档。");
+        legacyMenu.GetType().GetMethod("StartGame").Invoke(legacyMenu, null);
+
+        object nodeMapBuilder = null;
+        float legacyStartTimeout = Time.realtimeSinceStartup + 8f;
+        while (Time.realtimeSinceStartup < legacyStartTimeout)
+        {
+            nodeMapBuilder = FindGameComponent("NodeMapBuilder");
+            if (SceneManager.GetSceneByName("GameScene").isLoaded &&
+                nodeMapBuilder != null &&
+                ((IDictionary)nodeMapBuilder.GetType().GetField("nodeHasCreated")
+                    .GetValue(nodeMapBuilder)).Count > 0 &&
+                legacyManagerType.GetField("gameState").GetValue(legacyManager).ToString() == "Playing")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        Assert.That(nodeMapBuilder, Is.Not.Null);
+        object uiManager = FindGameComponent("UIManager");
+        object videoManager = FindGameComponent("VideoManager");
+        object dialogSystem = FindGameComponent("DialogSystem");
+        Assert.That(uiManager, Is.Not.Null);
+        uiManager.GetType().GetField("UIShow").SetValue(uiManager, false);
+        ((Transform)videoManager.GetType().GetField("cutSceneUIPanel").GetValue(videoManager))
+            .gameObject.SetActive(false);
+        ((GameObject)dialogSystem.GetType().GetField("dialogPanel").GetValue(dialogSystem))
+            .SetActive(false);
+        ((Transform)dialogSystem.GetType().GetField("AIDialogPanel").GetValue(dialogSystem))
+            .gameObject.SetActive(false);
+
+        MethodInfo saveLegacy = legacyManagerType.GetMethod(
+            "TrySaveCurrentProgress", BindingFlags.Instance | BindingFlags.NonPublic);
+        object[] legacySaveArguments = { null };
+        Assert.That((bool)saveLegacy.Invoke(legacyManager, legacySaveArguments), Is.True,
+            legacySaveArguments[0] as string);
+        FieldInfo legacyLevel = legacyManagerType.GetField("levelIndex");
+        FieldInfo legacyGraph = legacyManagerType.GetField(
+            "graphIndex", BindingFlags.Instance | BindingFlags.NonPublic);
+        FieldInfo legacyAnxiety = legacyManagerType.GetField("currentAnxiety");
+        int expectedLevel = (int)legacyLevel.GetValue(legacyManager);
+        int expectedGraph = (int)legacyGraph.GetValue(legacyManager);
+        float expectedAnxiety = (float)legacyAnxiety.GetValue(legacyManager);
+        Assert.That((bool)saveExists.Invoke(null, new object[] { legacyProfile }), Is.True);
+        Assert.That((bool)saveExists.Invoke(null, new object[] { inkProfile }), Is.False);
+
+        DestroyExistingGameManager();
+        yield return SceneManager.LoadSceneAsync("LoadScene", LoadSceneMode.Single);
+        object inkManager = null;
+        object inkMenu = null;
+        for (int frame = 0; frame < 240; frame++)
+        {
+            inkManager = FindGameComponent("GameManager");
+            inkMenu = FindGameComponent("GameMenu");
+            if (inkManager != null && inkMenu != null)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        Type inkManagerType = inkManager.GetType();
+        IEnumerable availableGames = (IEnumerable)inkManagerType.GetProperty("AvailableGames")
+            .GetValue(inkManager);
+        object inkDefinition = availableGames.Cast<object>().Single(game =>
+            game.GetType().GetField("gameId").GetValue(game).ToString() == "the-intercept");
+        Assert.That((bool)inkManagerType.GetMethod("SelectGame")
+            .Invoke(inkManager, new[] { inkDefinition }), Is.True);
+        inkMenu.GetType().GetMethod("StartGame").Invoke(inkMenu, null);
+
+        PropertyInfo currentInkPage = inkManagerType.GetProperty("CurrentInkStoryPage");
+        float inkStartTimeout = Time.realtimeSinceStartup + 8f;
+        while (Time.realtimeSinceStartup < inkStartTimeout)
+        {
+            if (SceneManager.GetSceneByName("GameScene").isLoaded &&
+                currentInkPage.GetValue(inkManager) != null &&
+                inkManagerType.GetField("gameState").GetValue(inkManager).ToString() == "Playing")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        object openingPage = currentInkPage.GetValue(inkManager);
+        Assert.That(openingPage, Is.Not.Null);
+        Type inkPageType = openingPage.GetType();
+        IList openingChoices = (IList)inkPageType.GetField("choices").GetValue(openingPage);
+        int firstChoiceIndex = (int)openingChoices[0].GetType().GetField("index")
+            .GetValue(openingChoices[0]);
+        Assert.That((bool)inkManagerType.GetMethod("ChooseInkStory")
+            .Invoke(inkManager, new object[] { firstChoiceIndex }), Is.True);
+
+        object savedInkPage = currentInkPage.GetValue(inkManager);
+        int expectedSequence = (int)inkPageType.GetField("sequence").GetValue(savedInkPage);
+        string expectedInkTitle = (string)inkPageType.GetField("title").GetValue(savedInkPage);
+        IList savedInkLines = (IList)inkPageType.GetField("lines").GetValue(savedInkPage);
+        string expectedInkLine = (string)savedInkLines[0].GetType().GetField("text")
+            .GetValue(savedInkLines[0]);
+        IList savedInkChoices = (IList)inkPageType.GetField("choices").GetValue(savedInkPage);
+        string[] expectedInkChoices = savedInkChoices.Cast<object>().Select(choice =>
+            (string)choice.GetType().GetField("label").GetValue(choice)).ToArray();
+
+        MethodInfo saveInk = inkManagerType.GetMethod(
+            "TrySaveCurrentProgress", BindingFlags.Instance | BindingFlags.NonPublic);
+        object[] inkSaveArguments = { null };
+        Assert.That((bool)saveInk.Invoke(inkManager, inkSaveArguments), Is.True,
+            inkSaveArguments[0] as string);
+        Assert.That((bool)saveExists.Invoke(null, new object[] { legacyProfile }), Is.True,
+            "保存《密电疑云》不得覆盖旧游戏存档。");
+        Assert.That((bool)saveExists.Invoke(null, new object[] { inkProfile }), Is.True);
+
+        DestroyExistingGameManager();
+        yield return SceneManager.LoadSceneAsync("LoadScene", LoadSceneMode.Single);
+        for (int frame = 0; frame < 240 &&
+             !SceneManager.GetSceneByName("MainMenu").isLoaded; frame++)
+        {
+            yield return null;
+        }
+        Type.GetType("FactoryEscapeAccessibility, Assembly-CSharp")?
+            .GetMethod("RefreshScreen", BindingFlags.Static | BindingFlags.Public)?
+            .Invoke(null, new object[] { string.Empty });
+
+        float catalogTimeout = Time.realtimeSinceStartup + 5f;
+        while (Time.realtimeSinceStartup < catalogTimeout &&
+               AssistiveSupport.activeHierarchy?.rootNodes.Any(node =>
+                   node.label == "密电疑云") != true)
+        {
+            yield return null;
+        }
+
+        FieldInfo invokedField = typeof(AccessibilityNode).GetField(
+            "invoked", BindingFlags.Instance | BindingFlags.NonPublic);
+        AccessibilityNode inkCatalogNode = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "密电疑云");
+        Assert.That(((Func<bool>)invokedField.GetValue(inkCatalogNode)).Invoke(), Is.True);
+        for (int frame = 0; frame < 60 &&
+             AssistiveSupport.activeHierarchy.rootNodes.All(node =>
+                 node.label != "返回文字冒险屋"); frame++)
+        {
+            yield return null;
+        }
+
+        AccessibilityNode returnToCatalog = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "返回文字冒险屋");
+        Assert.That(((Func<bool>)invokedField.GetValue(returnToCatalog)).Invoke(), Is.True);
+        for (int frame = 0; frame < 60 &&
+             AssistiveSupport.activeHierarchy.rootNodes.All(node =>
+                 node.label != "密电疑云"); frame++)
+        {
+            yield return null;
+        }
+        Assert.That(AssistiveSupport.activeHierarchy.rootNodes.Select(node => node.label),
+            Is.EqualTo(new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "参数设置", "返回游戏大厅" }));
+
+        inkCatalogNode = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "密电疑云");
+        Assert.That(((Func<bool>)invokedField.GetValue(inkCatalogNode)).Invoke(), Is.True);
+        for (int frame = 0; frame < 60 &&
+             AssistiveSupport.activeHierarchy.rootNodes.All(node =>
+                 node.label != "继续游戏"); frame++)
+        {
+            yield return null;
+        }
+        AccessibilityNode continueInk = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "继续游戏");
+        Assert.That(((Func<bool>)invokedField.GetValue(continueInk)).Invoke(), Is.True);
+
+        object restoredInkManager = FindGameComponent("GameManager");
+        Type restoredInkManagerType = restoredInkManager.GetType();
+        PropertyInfo restoredInkPageProperty = restoredInkManagerType.GetProperty("CurrentInkStoryPage");
+        float inkRestoreTimeout = Time.realtimeSinceStartup + 8f;
+        while (Time.realtimeSinceStartup < inkRestoreTimeout &&
+               (!SceneManager.GetSceneByName("GameScene").isLoaded ||
+                restoredInkPageProperty.GetValue(restoredInkManager) == null))
+        {
+            yield return null;
+        }
+
+        object restoredInkPage = restoredInkPageProperty.GetValue(restoredInkManager);
+        Assert.That(inkPageType.GetField("sequence").GetValue(restoredInkPage),
+            Is.EqualTo(expectedSequence));
+        Assert.That(inkPageType.GetField("title").GetValue(restoredInkPage),
+            Is.EqualTo(expectedInkTitle));
+        IList restoredInkLines = (IList)inkPageType.GetField("lines").GetValue(restoredInkPage);
+        Assert.That(restoredInkLines[0].GetType().GetField("text").GetValue(restoredInkLines[0]),
+            Is.EqualTo(expectedInkLine));
+        IList restoredInkChoices = (IList)inkPageType.GetField("choices").GetValue(restoredInkPage);
+        Assert.That(restoredInkChoices.Cast<object>().Select(choice =>
+                (string)choice.GetType().GetField("label").GetValue(choice)),
+            Is.EqualTo(expectedInkChoices));
+        Assert.That((bool)saveExists.Invoke(null, new object[] { legacyProfile }), Is.True);
+
+        DestroyExistingGameManager();
+        yield return SceneManager.LoadSceneAsync("LoadScene", LoadSceneMode.Single);
+        object restoredLegacyManager = null;
+        object restoredLegacyMenu = null;
+        for (int frame = 0; frame < 240; frame++)
+        {
+            restoredLegacyManager = FindGameComponent("GameManager");
+            restoredLegacyMenu = FindGameComponent("GameMenu");
+            if (restoredLegacyManager != null && restoredLegacyMenu != null)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        Assert.That((bool)restoredLegacyMenu.GetType().GetMethod("TryContinueFromMain")
+            .Invoke(restoredLegacyMenu, new object[] { null }), Is.True);
+        Type restoredLegacyManagerType = restoredLegacyManager.GetType();
+        float legacyRestoreTimeout = Time.realtimeSinceStartup + 8f;
+        while (Time.realtimeSinceStartup < legacyRestoreTimeout &&
+               (!SceneManager.GetSceneByName("GameScene").isLoaded ||
+                restoredLegacyManagerType.GetField("gameState").GetValue(restoredLegacyManager)
+                    .ToString() != "Playing"))
+        {
+            yield return null;
+        }
+
+        Assert.That(restoredLegacyManagerType.GetField("levelIndex").GetValue(restoredLegacyManager),
+            Is.EqualTo(expectedLevel));
+        Assert.That(restoredLegacyManagerType.GetField(
+                "graphIndex", BindingFlags.Instance | BindingFlags.NonPublic)
+            .GetValue(restoredLegacyManager), Is.EqualTo(expectedGraph));
+        Assert.That(restoredLegacyManagerType.GetField("currentAnxiety")
+            .GetValue(restoredLegacyManager), Is.EqualTo(expectedAnxiety));
+        Assert.That((bool)saveExists.Invoke(null, new object[] { inkProfile }), Is.True,
+            "继续旧游戏不得删除或覆盖《密电疑云》存档。");
+
+        restoredLegacyManagerType.GetMethod("StartNewGame").Invoke(restoredLegacyManager, null);
+        deleteSave.Invoke(null, new object[] { inkProfile });
+    }
+
+    [UnityTest]
+    public IEnumerator TheInterceptMenuOpeningAndAudioAreAccessible()
+    {
+        const string profileName = "GameProgress_the-intercept";
+        const string openingDescription =
+            "画面描述：1942年的布莱切利园。十四号小屋内摆着一张简陋的行军桌和两把椅子，门从外面锁着，主角独自坐在桌边等候审讯。";
+        Type saveManagerType = Type.GetType("SaveManager, Assembly-CSharp");
+        MethodInfo deleteSave = saveManagerType?.GetMethod("Delete");
+        MethodInfo saveExists = saveManagerType?.GetMethod("Exists");
+        Assert.That(deleteSave, Is.Not.Null);
+        Assert.That(saveExists, Is.Not.Null);
+        deleteSave.Invoke(null, new object[] { profileName });
+        AssistiveSupport.screenReaderStatusOverride =
+            AssistiveSupport.ScreenReaderStatusOverride.ForceEnabled;
+        DestroyExistingGameManager();
+        yield return SceneManager.LoadSceneAsync("LoadScene", LoadSceneMode.Single);
+        for (int frame = 0; frame < 240 &&
+             !SceneManager.GetSceneByName("MainMenu").isLoaded; frame++)
+        {
+            yield return null;
+        }
+        Type.GetType("FactoryEscapeAccessibility, Assembly-CSharp")?
+            .GetMethod("RefreshScreen", BindingFlags.Static | BindingFlags.Public)?
+            .Invoke(null, new object[] { string.Empty });
+
+        float menuTimeout = Time.realtimeSinceStartup + 5f;
+        while (Time.realtimeSinceStartup < menuTimeout)
+        {
+            if (AssistiveSupport.activeHierarchy?.rootNodes.Any(node =>
+                    node.label == "密电疑云") == true)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        AccessibilityHierarchy hierarchy = AssistiveSupport.activeHierarchy;
+        Assert.That(hierarchy, Is.Not.Null);
+        object gameManager = FindGameComponent("GameManager");
+        Type managerType = gameManager.GetType();
+        PropertyInfo currentInkPage = managerType.GetProperty("CurrentInkStoryPage");
+        AccessibilityNode catalogNode = hierarchy.rootNodes.Single(node => node.label == "密电疑云");
+        FieldInfo invokedField = typeof(AccessibilityNode).GetField(
+            "invoked", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(invokedField, Is.Not.Null);
+        Assert.That(managerType.GetProperty("DisplayName").GetValue(gameManager),
+            Is.EqualTo("抓住未尽的余晖"),
+            "只把焦点移到目录项时，不应选择或载入新游戏。");
+        Assert.That(currentInkPage.GetValue(gameManager), Is.Null);
+        Assert.That((bool)saveExists.Invoke(null, new object[] { profileName }), Is.False);
+        object audioManager = FindGameComponent("soundManager");
+        PropertyInfo lastPlayedSfx = audioManager.GetType().GetProperty("LastPlayedSfxName");
+        Assert.That(lastPlayedSfx.GetValue(audioManager), Is.EqualTo(string.Empty),
+            "只把焦点移到目录项时不得播放操作音效。");
+
+        Assert.That(((Func<bool>)invokedField.GetValue(catalogNode)).Invoke(), Is.True);
+        for (int frame = 0; frame < 60; frame++)
+        {
+            if (AssistiveSupport.activeHierarchy?.rootNodes.Any(node =>
+                    node.label == "开始游戏") == true)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        object gameDefinition = managerType.GetField("gameDefinition").GetValue(gameManager);
+        Type gameDefinitionType = gameDefinition.GetType();
+        Assert.That(gameDefinitionType.GetField("gameId").GetValue(gameDefinition),
+            Is.EqualTo("the-intercept"));
+        Assert.That(gameDefinitionType.GetProperty("SaveProfileName").GetValue(gameDefinition),
+            Is.EqualTo(profileName));
+        TextAsset licenseDocument = (TextAsset)gameDefinitionType.GetField("licenseDocument")
+            .GetValue(gameDefinition);
+        Assert.That(licenseDocument, Is.Not.Null, "移除许可菜单不应删除随包保留的 MIT 许可文件。");
+        StringAssert.Contains("The MIT License (MIT)", licenseDocument.text);
+        Assert.That(currentInkPage.GetValue(gameManager), Is.Null,
+            "选择目录项只应打开操作菜单，不应自动开始剧情。");
+        Assert.That((bool)saveExists.Invoke(null, new object[] { profileName }), Is.False);
+        Assert.That(lastPlayedSfx.GetValue(audioManager), Is.EqualTo("Selected"),
+            "显式激活菜单项时应播放选中音效。");
+        Assert.That(
+            AssistiveSupport.activeHierarchy.rootNodes.Select(node => node.label),
+            Is.EqualTo(new[] { "开始游戏", "继续游戏", "返回文字冒险屋" }));
+
+        AccessibilityNode startNode = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "开始游戏");
+        Assert.That(((Func<bool>)invokedField.GetValue(startNode)).Invoke(), Is.True);
+        for (int frame = 0; frame < 240; frame++)
+        {
+            if (SceneManager.GetSceneByName("GameScene").isLoaded &&
+                AssistiveSupport.activeHierarchy?.rootNodes.Any(node =>
+                    node.label == "继续等待审问") == true)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        Assert.That(SceneManager.GetSceneByName("GameScene").isLoaded, Is.True);
+        Type audioManagerType = audioManager.GetType();
+        AudioSource musicSource = (AudioSource)audioManagerType.GetField("musicSource")
+            .GetValue(audioManager);
+        IEnumerable configuredMusic = (IEnumerable)audioManagerType.GetField("musicSound")
+            .GetValue(audioManager);
+        object theme = configuredMusic.Cast<object>().Single(sound =>
+            sound.GetType().GetField("name").GetValue(sound).Equals("Theme"));
+        AudioClip themeClip = (AudioClip)theme.GetType().GetField("clip").GetValue(theme);
+        Assert.That(musicSource.clip, Is.SameAs(themeClip),
+            "《密电疑云》应复用《抓住未尽的余晖》的 Theme 音乐资源。");
+        Assert.That(musicSource.loop, Is.True);
+        string[] openingLabels = AssistiveSupport.activeHierarchy.rootNodes
+            .Select(node => node.label).ToArray();
+        Assert.That(openingLabels[0], Is.EqualTo("第一幕：十四号小屋"));
+        Assert.That(AssistiveSupport.activeHierarchy.rootNodes[0].role,
+            Is.EqualTo(AccessibilityRole.Header));
+        Assert.That(openingLabels[1], Is.EqualTo(openingDescription));
+        Assert.That(openingLabels, Does.Contain("他们故意让我等着。"));
+        Assert.That(openingLabels, Does.Contain("继续等待审问"));
+        Assert.That(openingLabels[^1], Is.EqualTo("存档并退出"));
+        object openingPage = currentInkPage.GetValue(gameManager);
+        Assert.That(openingPage.GetType().GetField("title").GetValue(openingPage),
+            Is.EqualTo("第一幕：十四号小屋"));
+        deleteSave.Invoke(null, new object[] { profileName });
+    }
+
     [Test]
     public void TextStoryModelSupportsOptionalArtworkLinearPagesAndChoices()
     {
@@ -1292,6 +1836,145 @@ public sealed class AccessibilitySmokeTests
                 UnityEngine.Object.DestroyImmediate(secondGame);
             }
             UnityEngine.Object.DestroyImmediate(game);
+        }
+    }
+
+    [Test]
+    public void InkStoryRuntimePreservesChoicesAndFullStateAcrossRestore()
+    {
+        Type compilerType = Type.GetType("Ink.Compiler, Ink-Libraries");
+        Type sessionType = Type.GetType("InkAdventureSession, Assembly-CSharp");
+        Assert.That(compilerType, Is.Not.Null, "必须安装固定版本的官方 Ink 编译与运行时。");
+        Assert.That(sessionType, Is.Not.Null);
+
+        const string source = @"VAR red = false
+# title: 测试章节
+# visual: 桌上并排放着红色和蓝色两只信封。
+你需要选择一只信封。
+* [打开红色信封]
+    ~ red = true
+    -> result
+* [打开蓝色信封]
+    -> result
+=== result
+# visual: 一扇关闭的门立在面前。
+{ red:
+红色信封里有一把钥匙。
+- else:
+蓝色信封里只有一张白纸。
+}
+* [走向门口]
+    你走到门前。
+    -> END";
+
+        object compiler = Activator.CreateInstance(compilerType, new object[] { source, null });
+        object compiledStory = compilerType.GetMethod("Compile").Invoke(compiler, null);
+        string storyJson = (string)compiledStory.GetType().GetMethod("ToJson", Type.EmptyTypes)
+            .Invoke(compiledStory, null);
+
+        object session = Activator.CreateInstance(sessionType,
+            new object[] { storyJson, "默认标题", "默认画面描述" });
+        object[] startArguments = { null };
+        Assert.That((bool)sessionType.GetMethod("Start").Invoke(session, startArguments), Is.True,
+            startArguments[0] as string);
+
+        PropertyInfo currentPageProperty = sessionType.GetProperty("CurrentPage");
+        object firstPage = currentPageProperty.GetValue(session);
+        IList firstChoices = (IList)firstPage.GetType().GetField("choices").GetValue(firstPage);
+        Assert.That(firstChoices.Count, Is.EqualTo(2));
+        Assert.That(firstPage.GetType().GetField("title").GetValue(firstPage), Is.EqualTo("测试章节"));
+
+        int redChoiceIndex = (int)firstChoices[0].GetType().GetField("index").GetValue(firstChoices[0]);
+        object[] choiceArguments = { redChoiceIndex, null };
+        Assert.That((bool)sessionType.GetMethod("Choose").Invoke(session, choiceArguments), Is.True,
+            choiceArguments[1] as string);
+
+        object savedPage = currentPageProperty.GetValue(session);
+        Assert.That(savedPage.GetType().GetField("title").GetValue(savedPage),
+            Is.EqualTo("测试章节"), "没有新标签时必须沿用当前场景标题。");
+        IList savedLines = (IList)savedPage.GetType().GetField("lines").GetValue(savedPage);
+        Assert.That(savedLines.Cast<object>().Any(line =>
+            ((string)line.GetType().GetField("text").GetValue(line)).Contains("钥匙")), Is.True);
+        string stateJson = (string)sessionType.GetMethod("GetStateJson").Invoke(session, null);
+        Assert.That(stateJson, Is.Not.Empty);
+
+        object restoredSession = Activator.CreateInstance(sessionType,
+            new object[] { storyJson, "默认标题", "默认画面描述" });
+        object[] restoreArguments = { stateJson, savedPage, null };
+        Assert.That((bool)sessionType.GetMethod("Restore").Invoke(restoredSession, restoreArguments), Is.True,
+            restoreArguments[2] as string);
+
+        object restoredPage = currentPageProperty.GetValue(restoredSession);
+        IList restoredLines = (IList)restoredPage.GetType().GetField("lines").GetValue(restoredPage);
+        IList restoredChoices = (IList)restoredPage.GetType().GetField("choices").GetValue(restoredPage);
+        Assert.That(restoredLines.Cast<object>().Any(line =>
+            ((string)line.GetType().GetField("text").GetValue(line)).Contains("钥匙")), Is.True,
+            "恢复后必须保留当前页全部可见正文，而不是只剩最后一次 Continue 的输出。");
+        Assert.That(restoredChoices.Count, Is.EqualTo(1));
+
+        int finalChoiceIndex = (int)restoredChoices[0].GetType().GetField("index")
+            .GetValue(restoredChoices[0]);
+        object[] finalChoiceArguments = { finalChoiceIndex, null };
+        Assert.That((bool)sessionType.GetMethod("Choose")
+            .Invoke(restoredSession, finalChoiceArguments), Is.True);
+        object endingPage = currentPageProperty.GetValue(restoredSession);
+        Assert.That(endingPage.GetType().GetField("isEnding").GetValue(endingPage), Is.True);
+    }
+
+    [Test]
+    public void InkStoryProgressSerializesStateAndVisiblePage()
+    {
+        string profileName = $"__InkStoryProgressTest_{Guid.NewGuid():N}";
+        Type progressType = Type.GetType("InkStoryProgressState, Assembly-CSharp");
+        Type pageType = Type.GetType("InkAdventurePage, Assembly-CSharp");
+        Type lineType = Type.GetType("TextAdventureLine, Assembly-CSharp");
+        Type saveManagerType = Type.GetType("SaveManager, Assembly-CSharp");
+        Type profileType = Type.GetType("SaveProfile`1, Assembly-CSharp")?
+            .MakeGenericType(progressType);
+        Assert.That(new[] { progressType, pageType, lineType, saveManagerType, profileType }
+            .All(type => type != null), Is.True);
+
+        object page = Activator.CreateInstance(pageType);
+        pageType.GetField("sequence").SetValue(page, 7);
+        pageType.GetField("title").SetValue(page, "第二幕");
+        pageType.GetField("visualDescription").SetValue(page, "审讯室里只有一盏台灯。");
+        IList lines = (IList)pageType.GetField("lines").GetValue(page);
+        object line = Activator.CreateInstance(lineType);
+        lineType.GetField("text").SetValue(line, "这行正文必须随存档恢复。");
+        lines.Add(line);
+
+        object progress = Activator.CreateInstance(progressType);
+        progressType.GetField("version").SetValue(progress, 1);
+        progressType.GetField("gameId").SetValue(progress, "the-intercept");
+        progressType.GetField("storyStateJson").SetValue(progress, "完整 Ink 状态");
+        progressType.GetField("page").SetValue(progress, page);
+        object profile = Activator.CreateInstance(profileType, new[] { profileName, progress });
+
+        MethodInfo save = saveManagerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(method => method.Name == "SaveOrReplace")
+            .MakeGenericMethod(progressType);
+        MethodInfo load = saveManagerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(method => method.Name == "LoadCandidates")
+            .MakeGenericMethod(progressType);
+        MethodInfo delete = saveManagerType.GetMethod("Delete", BindingFlags.Public | BindingFlags.Static);
+
+        try
+        {
+            save.Invoke(null, new[] { profile });
+            IList candidates = (IList)load.Invoke(null, new object[] { profileName });
+            Assert.That(candidates.Count, Is.EqualTo(1));
+            object loadedProgress = profileType.GetField("saveData").GetValue(candidates[0]);
+            Assert.That(progressType.GetField("storyStateJson").GetValue(loadedProgress),
+                Is.EqualTo("完整 Ink 状态"));
+            object loadedPage = progressType.GetField("page").GetValue(loadedProgress);
+            Assert.That(pageType.GetField("title").GetValue(loadedPage), Is.EqualTo("第二幕"));
+            IList loadedLines = (IList)pageType.GetField("lines").GetValue(loadedPage);
+            Assert.That(lineType.GetField("text").GetValue(loadedLines[0]),
+                Is.EqualTo("这行正文必须随存档恢复。"));
+        }
+        finally
+        {
+            delete.Invoke(null, new object[] { profileName });
         }
     }
 

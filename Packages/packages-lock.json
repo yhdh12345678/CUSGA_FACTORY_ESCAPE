@@ -1,5 +1,12 @@
 {
   "dependencies": {
+    "com.inkle.ink-unity-integration": {
+      "version": "https://github.com/inkle/ink-unity-integration.git?path=/Packages/com.inkle.ink-unity-integration#a0b734d906a6224050af7c4f39392fd9ba5988fe",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "a0b734d906a6224050af7c4f39392fd9ba5988fe"
+    },
     "com.unity.2d.animation": {
       "version": "13.0.5",
       "depth": 1,
