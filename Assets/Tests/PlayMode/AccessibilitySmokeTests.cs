@@ -94,16 +94,37 @@ public sealed class AccessibilitySmokeTests
     }
 
     [Test]
-    public void AndroidBuildAllowsOnlyPortraitOrientation()
+    public void AndroidPortraitRequestIsLimitedToConnectedGameSession()
     {
-        string source = File.ReadAllText(Path.Combine(
+        string automationSource = File.ReadAllText(Path.Combine(
             Application.dataPath, "Editor", "FactoryEscapeAutomation.cs"));
-        StringAssert.Contains(
-            "PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;", source);
-        StringAssert.Contains("PlayerSettings.allowedAutorotateToPortrait = true;", source);
-        StringAssert.Contains("PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;", source);
-        StringAssert.Contains("PlayerSettings.allowedAutorotateToLandscapeLeft = false;", source);
-        StringAssert.Contains("PlayerSettings.allowedAutorotateToLandscapeRight = false;", source);
+        StringAssert.DoesNotContain("PlayerSettings.defaultInterfaceOrientation", automationSource,
+            "游戏构建脚本不得向整个大厅写入固定方向设置。");
+        StringAssert.DoesNotContain("PlayerSettings.allowedAutorotate", automationSource,
+            "游戏构建脚本不得覆盖大厅的自动旋转设置。");
+
+        string projectSettings = File.ReadAllText(Path.Combine(
+            Directory.GetParent(Application.dataPath).FullName,
+            "ProjectSettings", "ProjectSettings.asset"));
+        StringAssert.Contains("defaultScreenOrientation: 4", projectSettings,
+            "未进入文字冒险屋时，项目默认方向必须保持自动旋转。");
+        StringAssert.Contains("allowedAutorotateToLandscapeRight: 1", projectSettings);
+        StringAssert.Contains("allowedAutorotateToLandscapeLeft: 1", projectSettings);
+
+        string bridgeSource = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Scripts", "GameManager", "GameLobbyReturnBridge.cs"));
+        StringAssert.Contains("public static void EnterGameSession()", bridgeSource);
+        StringAssert.Contains("Screen.orientation = ScreenOrientation.Portrait;", bridgeSource);
+        StringAssert.Contains("EndOrientationSession();", bridgeSource);
+        StringAssert.Contains("Screen.orientation = previousOrientation;", bridgeSource,
+            "返回大厅或断开游戏会话时必须恢复进入前的方向。");
+
+        string gameManagerSource = File.ReadAllText(Path.Combine(
+            Application.dataPath, "Scripts", "GameManager", "GameManager.cs"));
+        StringAssert.Contains("GameLobbyReturnBridge.EnterGameSession();", gameManagerSource,
+            "文字冒险屋自身启用后必须进入竖屏会话。");
+        StringAssert.Contains("GameLobbyReturnBridge.ExitGameSession();", gameManagerSource,
+            "文字冒险屋停用后必须恢复进入前的方向。");
     }
 
     [UnityTest]
@@ -136,7 +157,7 @@ public sealed class AccessibilitySmokeTests
         for (int frame = 0; frame < 120; frame++)
         {
             Transform currentRoot = (Transform)rootProperty.GetValue(presentation);
-            bool mainMenuReady = (int)entryCountProperty.GetValue(presentation) == 5 &&
+            bool mainMenuReady = (int)entryCountProperty.GetValue(presentation) == 6 &&
                                   currentRoot.GetComponentsInChildren<TMP_Text>(false)
                                       .Any(text => text.text == "密电疑云");
             if (mainMenuReady)
@@ -152,12 +173,13 @@ public sealed class AccessibilitySmokeTests
         StringAssert.Contains("new Vector2(1080f, 2400f)", presentationSource);
         Transform presentationRoot = (Transform)rootProperty.GetValue(presentation);
         TMP_Text[] texts = presentationRoot.GetComponentsInChildren<TMP_Text>(false);
-        Assert.That((int)entryCountProperty.GetValue(presentation), Is.EqualTo(5),
-            $"游戏目录应显示三个子游戏、参数设置和返回游戏大厅。当前文字：{string.Join("|", texts.Select(text => text.text))}");
+        Assert.That((int)entryCountProperty.GetValue(presentation), Is.EqualTo(6),
+            $"游戏目录应显示三个子游戏、帮助、参数设置和返回游戏大厅。当前文字：{string.Join("|", texts.Select(text => text.text))}");
         Assert.That(texts.Any(text => text.text == "文字冒险屋"), Is.True);
         Assert.That(texts.Any(text => text.text == "抓住未尽的余晖"), Is.True);
         Assert.That(texts.Any(text => text.text == "密电疑云"), Is.True);
         Assert.That(texts.Any(text => text.text == "暗黑房间"), Is.True);
+        Assert.That(texts.Any(text => text.text == "帮助"), Is.True);
         Assert.That(texts.Any(text => text.text == "参数设置"), Is.True);
         Assert.That(texts.Any(text => text.text == "返回游戏大厅"), Is.True);
         Assert.That(texts.All(text => text.fontSize >= 38f), Is.True,
@@ -712,7 +734,7 @@ public sealed class AccessibilitySmokeTests
             AccessibilityHierarchy current = AssistiveSupport.activeHierarchy;
             if (current != null &&
                 current.rootNodes.Select(node => node.label).SequenceEqual(
-                    new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "参数设置", "返回游戏大厅" }))
+                    new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "帮助", "参数设置", "返回游戏大厅" }))
             {
                 break;
             }
@@ -724,7 +746,7 @@ public sealed class AccessibilitySmokeTests
         Assert.That(hierarchy, Is.Not.Null, "启用读屏后应创建无障碍层级。");
         Assert.That(
             hierarchy.rootNodes.Select(node => node.label),
-            Is.EqualTo(new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "参数设置", "返回游戏大厅" }),
+            Is.EqualTo(new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "帮助", "参数设置", "返回游戏大厅" }),
             "入口应先暴露子游戏目录，再进入具体游戏的开始和继续操作。");
         Assert.That(
             hierarchy.rootNodes.All(node => node.role == AccessibilityRole.Button),
@@ -854,6 +876,89 @@ public sealed class AccessibilitySmokeTests
             yield return null;
         }
 
+        AccessibilityNode helpNode = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "帮助");
+        Assert.That(((Func<bool>)invokedField.GetValue(helpNode)).Invoke(), Is.True);
+        for (int frame = 0; frame < 30; frame++)
+        {
+            if (AssistiveSupport.activeHierarchy.rootNodes.FirstOrDefault()?.label == "返回文字冒险屋")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+        Assert.That(
+            AssistiveSupport.activeHierarchy.rootNodes.Select(node => node.label),
+            Is.EqualTo(new[] { "返回文字冒险屋", "抓住未尽的余晖", "密电疑云", "暗黑房间" }),
+            "帮助页面应先显示顶部返回按钮，再显示三款游戏的帮助标题。");
+
+        AccessibilityNode interceptHelp = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "密电疑云");
+        Assert.That(((Func<bool>)invokedField.GetValue(interceptHelp)).Invoke(), Is.True);
+        for (int frame = 0; frame < 30; frame++)
+        {
+            if (AssistiveSupport.activeHierarchy.rootNodes.FirstOrDefault()?.label == "返回帮助列表")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+        Assert.That(AssistiveSupport.activeHierarchy.rootNodes[0].label, Is.EqualTo("返回帮助列表"));
+        Assert.That(AssistiveSupport.activeHierarchy.rootNodes.Any(node =>
+            node.label.Contains("纯文字分支互动小说")), Is.True);
+
+        Type accessibilityType = Type.GetType("FactoryEscapeAccessibility, Assembly-CSharp");
+        MethodInfo handleBack = accessibilityType?.GetMethod(
+            "HandleMainMenuBack", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(handleBack, Is.Not.Null, "帮助正文必须提供系统返回手势使用的返回路径。");
+        Assert.That(handleBack.Invoke(FindGameComponent("FactoryEscapeAccessibility"), null), Is.EqualTo(true));
+        for (int frame = 0; frame < 30; frame++)
+        {
+            if (AssistiveSupport.activeHierarchy.rootNodes.FirstOrDefault()?.label == "返回文字冒险屋")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+        AccessibilityNode interceptHelpAgain = AssistiveSupport.activeHierarchy.rootNodes
+            .Single(node => node.label == "密电疑云");
+        Assert.That(((Func<bool>)invokedField.GetValue(interceptHelpAgain)).Invoke(), Is.True);
+        for (int frame = 0; frame < 30; frame++)
+        {
+            if (AssistiveSupport.activeHierarchy.rootNodes.FirstOrDefault()?.label == "返回帮助列表")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+        AccessibilityNode articleBack = AssistiveSupport.activeHierarchy.rootNodes[0];
+        Assert.That(((Func<bool>)invokedField.GetValue(articleBack)).Invoke(), Is.True);
+        for (int frame = 0; frame < 30; frame++)
+        {
+            if (AssistiveSupport.activeHierarchy.rootNodes.FirstOrDefault()?.label == "返回文字冒险屋")
+            {
+                break;
+            }
+
+            yield return null;
+        }
+        AccessibilityNode helpBack = AssistiveSupport.activeHierarchy.rootNodes[0];
+        Assert.That(helpBack.label, Is.EqualTo("返回文字冒险屋"));
+        Assert.That(((Func<bool>)invokedField.GetValue(helpBack)).Invoke(), Is.True);
+        for (int frame = 0; frame < 30; frame++)
+        {
+            if (AssistiveSupport.activeHierarchy.rootNodes.Any(node => node.label == "帮助"))
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
         AccessibilityNode lobbyNode = AssistiveSupport.activeHierarchy.rootNodes
             .Single(node => node.label == "返回游戏大厅");
         Assert.That(((Func<bool>)invokedField.GetValue(lobbyNode)).Invoke(), Is.False,
@@ -865,14 +970,23 @@ public sealed class AccessibilitySmokeTests
         Assert.That(lobbyBridgeType, Is.Not.Null, "游戏侧必须提供正式大厅返回请求桥。");
         MethodInfo connectLobby = lobbyBridgeType.GetMethod("Connect", BindingFlags.Static | BindingFlags.Public);
         MethodInfo disconnectLobby = lobbyBridgeType.GetMethod("Disconnect", BindingFlags.Static | BindingFlags.Public);
+        FieldInfo orientationSession = lobbyBridgeType.GetField(
+            "orientationSessionActive", BindingFlags.Static | BindingFlags.NonPublic);
         Assert.That(connectLobby, Is.Not.Null);
         Assert.That(disconnectLobby, Is.Not.Null);
+        Assert.That(orientationSession, Is.Not.Null);
+        Assert.That(orientationSession.GetValue(null), Is.EqualTo(true),
+            "文字冒险屋当前正在运行，必须保持竖屏会话。");
         connectLobby.Invoke(null, new object[] { returnHandler });
         try
         {
+            Assert.That(orientationSession.GetValue(null), Is.EqualTo(true),
+                "连接大厅返回通道不得取消本游戏的竖屏会话。");
             Assert.That(((Func<bool>)invokedField.GetValue(lobbyNode)).Invoke(), Is.True,
                 "连接大厅宿主后应把显式激活动作交给正式返回通道。");
             Assert.That(returnReason, Is.EqualTo("factory_escape_main_menu"));
+            Assert.That(orientationSession.GetValue(null), Is.EqualTo(false),
+                "返回大厅前必须结束竖屏会话并恢复原方向。");
         }
         finally
         {
@@ -1525,7 +1639,7 @@ public sealed class AccessibilitySmokeTests
             yield return null;
         }
         Assert.That(AssistiveSupport.activeHierarchy.rootNodes.Select(node => node.label),
-            Is.EqualTo(new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "参数设置", "返回游戏大厅" }));
+            Is.EqualTo(new[] { "抓住未尽的余晖", "密电疑云", "暗黑房间", "帮助", "参数设置", "返回游戏大厅" }));
 
         inkCatalogNode = AssistiveSupport.activeHierarchy.rootNodes
             .Single(node => node.label == "密电疑云");

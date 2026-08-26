@@ -98,6 +98,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
     }
     
     private void OnEnable() {
+        GameLobbyReturnBridge.EnterGameSession();
         StaticEventHandler.OnGetNextNodeLevel += StaticEventHandler_OnGetNextNodeLevel;
 
         StaticEventHandler.OnGetResult += StaticEventHandler_OnGetResult;
@@ -107,6 +108,7 @@ public class GameManager : SingletonMonobehaviour<GameManager>
         StaticEventHandler.OnGetNextNodeLevel -= StaticEventHandler_OnGetNextNodeLevel;
 
         StaticEventHandler.OnGetResult -= StaticEventHandler_OnGetResult;
+        GameLobbyReturnBridge.ExitGameSession();
     }
 
     private void InitializeGameDefinition()

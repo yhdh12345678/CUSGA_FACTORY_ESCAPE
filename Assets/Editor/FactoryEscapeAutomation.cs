@@ -40,11 +40,6 @@ public static class FactoryEscapeAutomation
         PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
         PlayerSettings.Android.targetArchitectures = architecture;
         PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
-        PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
-        PlayerSettings.allowedAutorotateToPortrait = true;
-        PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
-        PlayerSettings.allowedAutorotateToLandscapeLeft = false;
-        PlayerSettings.allowedAutorotateToLandscapeRight = false;
 
         BuildReport report;
         try

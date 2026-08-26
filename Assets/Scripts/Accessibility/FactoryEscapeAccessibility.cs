@@ -18,8 +18,35 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         GameActions,
         Options,
         MusicVolume,
-        SfxVolume
+        SfxVolume,
+        HelpList,
+        HelpArticle
     }
+
+    private sealed class HelpArticle
+    {
+        public string title;
+        public string body;
+    }
+
+    private static readonly HelpArticle[] HelpArticles =
+    {
+        new HelpArticle
+        {
+            title = "抓住未尽的余晖",
+            body = "节点式文字冒险。先阅读画面描述和对话，再激活可用选项或继续剧情。选择会改变后续节点和结局；游戏中可以使用存档并退出。"
+        },
+        new HelpArticle
+        {
+            title = "密电疑云",
+            body = "纯文字分支互动小说。阅读场景与对话，激活选项决定曼宁的应对。不同选择会改变线索、关系和结局；需要暂停时可以存档并退出。"
+        },
+        new HelpArticle
+        {
+            title = "暗黑房间",
+            body = "资源经营与远征文字游戏。在房间收集和分配资源，准备装备后出发探索；事件和战斗选项会消耗资源并影响进度。浏览只查看，激活按钮才执行动作。"
+        }
+    };
 
     private sealed class Item
     {
@@ -42,6 +69,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private string pendingFocusKey = string.Empty;
     private string modalReturnFocusKey = string.Empty;
     private MainMenuPage mainMenuPage;
+    private int helpArticleIndex = -1;
     private float nextRefreshTime;
     private bool announceNextRefresh;
     private string currentVisualSignature = string.Empty;
@@ -269,6 +297,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
             return;
         }
 
+        if (IsSceneLoaded("MainMenu") && !IsSceneLoaded("GameScene") &&
+            Input.GetKeyDown(KeyCode.Escape) && HandleMainMenuBack())
+        {
+            return;
+        }
+
 #if UNITY_EDITOR
         UpdateEditorPreview();
 #endif
@@ -299,6 +333,7 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
         if (scene.name == "MainMenu")
         {
             mainMenuPage = MainMenuPage.Root;
+            helpArticleIndex = -1;
         }
 
         StartCoroutine(RefreshAfterLayout(true));
@@ -1237,6 +1272,30 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                     () => OpenMainMenuPage(MainMenuPage.Options, "main-sfx-volume"));
                 break;
 
+            case MainMenuPage.HelpList:
+                AddMenuAction(items, "help-list-back", "返回文字冒险屋",
+                    () => OpenMainMenuPage(MainMenuPage.Root, "main-help"));
+                for (int index = 0; index < HelpArticles.Length; index++)
+                {
+                    int capturedIndex = index;
+                    AddMenuAction(items, $"help-article-{index}", HelpArticles[index].title,
+                        () => OpenHelpArticle(capturedIndex));
+                }
+                break;
+
+            case MainMenuPage.HelpArticle:
+                if (helpArticleIndex < 0 || helpArticleIndex >= HelpArticles.Length)
+                {
+                    return OpenHelpListItems();
+                }
+
+                AddMenuAction(items, "help-article-back", "返回帮助列表",
+                    () => OpenMainMenuPage(MainMenuPage.HelpList,
+                        $"help-article-{helpArticleIndex}"));
+                HelpArticle article = HelpArticles[helpArticleIndex];
+                AddStaticText(items, "help-article-body", article.body);
+                break;
+
             default:
                 GameManager manager = GameManager.Instance;
                 if (manager != null && manager.AvailableGames.Count > 0)
@@ -1257,6 +1316,8 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                         });
                     }
                 }
+                AddMenuAction(items, "main-help", "帮助",
+                    () => OpenMainMenuPage(MainMenuPage.HelpList));
                 AddMenuAction(items, "main-options", "参数设置",
                     () => OpenMainMenuPage(MainMenuPage.Options));
                 AddMenuAction(items, "main-quit", "返回游戏大厅", () =>
@@ -1365,9 +1426,48 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
     private bool OpenMainMenuPage(MainMenuPage page, string focusKey = "")
     {
         mainMenuPage = page;
+        if (page != MainMenuPage.HelpArticle)
+        {
+            helpArticleIndex = -1;
+        }
         pendingFocusKey = focusKey;
         QueueRefresh();
         return true;
+    }
+
+    private bool OpenHelpArticle(int index)
+    {
+        if (index < 0 || index >= HelpArticles.Length)
+        {
+            return false;
+        }
+
+        helpArticleIndex = index;
+        mainMenuPage = MainMenuPage.HelpArticle;
+        pendingFocusKey = "help-article-body";
+        QueueRefresh();
+        return true;
+    }
+
+    private bool HandleMainMenuBack()
+    {
+        switch (mainMenuPage)
+        {
+            case MainMenuPage.HelpArticle:
+                return OpenMainMenuPage(MainMenuPage.HelpList,
+                    $"help-article-{Mathf.Max(0, helpArticleIndex)}");
+            case MainMenuPage.HelpList:
+                return OpenMainMenuPage(MainMenuPage.Root, "main-help");
+            default:
+                return false;
+        }
+    }
+
+    private List<Item> OpenHelpListItems()
+    {
+        mainMenuPage = MainMenuPage.HelpList;
+        helpArticleIndex = -1;
+        return CollectMainMenuItems();
     }
 
     private void QueueRefresh()
@@ -1459,6 +1559,12 @@ public sealed class FactoryEscapeAccessibility : MonoBehaviour
                     return "音乐音量";
                 case MainMenuPage.SfxVolume:
                     return "音效音量";
+                case MainMenuPage.HelpList:
+                    return "帮助";
+                case MainMenuPage.HelpArticle:
+                    return helpArticleIndex >= 0 && helpArticleIndex < HelpArticles.Length
+                        ? HelpArticles[helpArticleIndex].title
+                        : "帮助";
                 default:
                     return "文字冒险屋";
             }
