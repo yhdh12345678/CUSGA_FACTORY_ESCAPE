@@ -189,6 +189,34 @@ public sealed class AccessibilitySmokeTests
         Assert.That(texts.All(text => text.fontSharedMaterial != text.font.material), Is.True,
             "竖屏文字必须使用独立材质，避免原界面动画把标题或正文改成透明。 ");
 
+        TMP_Text titleText = texts.Single(text => text.name == "Title");
+        Assert.That(titleText.fontSize, Is.GreaterThanOrEqualTo(56f),
+            "页面标题必须形成清晰的视觉层级。");
+        RectTransform contentRoot = presentationRoot.Find(
+            "SafeArea/ContentPanel/Viewport/Content") as RectTransform;
+        VerticalLayoutGroup layout = contentRoot.GetComponent<VerticalLayoutGroup>();
+        Assert.That(layout.spacing, Is.GreaterThanOrEqualTo(20f));
+        Assert.That(layout.padding.top, Is.GreaterThanOrEqualTo(12));
+
+        Button[] menuButtons = contentRoot.GetComponentsInChildren<Button>(false);
+        Assert.That(menuButtons.Length, Is.EqualTo(6));
+        foreach (Button button in menuButtons)
+        {
+            TMP_Text label = button.GetComponentInChildren<TMP_Text>(false);
+            Assert.That(label.fontSize, Is.GreaterThanOrEqualTo(42f));
+            Assert.That(button.colors.selectedColor, Is.Not.EqualTo(button.colors.normalColor),
+                $"{label.text}必须有清晰的可见焦点状态。");
+            Assert.That(ContrastRatio(label.color, button.colors.normalColor),
+                Is.GreaterThanOrEqualTo(4.5f), $"{label.text}普通状态对比度不足。");
+            Assert.That(ContrastRatio(label.color, button.colors.selectedColor),
+                Is.GreaterThanOrEqualTo(4.5f), $"{label.text}焦点状态对比度不足。");
+            Outline outline = button.GetComponent<Outline>();
+            Assert.That(outline, Is.Not.Null, $"{label.text}缺少高对比度边框。");
+            Assert.That(Mathf.Abs(outline.effectDistance.x), Is.GreaterThanOrEqualTo(3f));
+            Assert.That(button.GetComponent<LayoutElement>().preferredHeight,
+                Is.GreaterThanOrEqualTo(128f), $"{label.text}触控区域过小。");
+        }
+
         presentation.GetType().GetMethod("SetArtwork").Invoke(presentation, new object[] { null });
         RectTransform artworkBackground = presentationRoot.Find(
             "SafeArea/ArtworkBackground") as RectTransform;
@@ -908,6 +936,20 @@ public sealed class AccessibilitySmokeTests
         Assert.That(AssistiveSupport.activeHierarchy.rootNodes[0].label, Is.EqualTo("返回帮助列表"));
         Assert.That(AssistiveSupport.activeHierarchy.rootNodes.Any(node =>
             node.label.Contains("纯文字分支互动小说")), Is.True);
+
+        MonoBehaviour articlePresentation = Resources.FindObjectsOfTypeAll<MonoBehaviour>()
+            .First(component => component.GetType().Name == "PortraitTextPresentation");
+        Transform articleRoot = (Transform)articlePresentation.GetType()
+            .GetProperty("PresentationRoot").GetValue(articlePresentation);
+        Transform articleContent = articleRoot.Find("SafeArea/ContentPanel/Viewport/Content");
+        Assert.That(articleContent.GetChild(0).name, Is.EqualTo("Button_help-article-back"),
+            "帮助正文的可见返回按钮必须位于顶部。");
+        TMP_Text helpBody = articleContent.Find("Text_help-article-body/Label")
+            .GetComponent<TMP_Text>();
+        Assert.That(helpBody.fontSize, Is.GreaterThanOrEqualTo(40f));
+        Assert.That(helpBody.lineSpacing, Is.GreaterThanOrEqualTo(8f));
+        helpBody.ForceMeshUpdate(true);
+        Assert.That(helpBody.isTextOverflowing, Is.False, "帮助正文不得发生可见文字溢出。");
 
         Type accessibilityType = Type.GetType("FactoryEscapeAccessibility, Assembly-CSharp");
         MethodInfo handleBack = accessibilityType?.GetMethod(
@@ -2136,6 +2178,27 @@ public sealed class AccessibilitySmokeTests
             BindingFlags.Public | BindingFlags.Static);
         Assert.That(fontProperty, Is.Not.Null);
         return fontProperty.GetValue(null) as TMP_FontAsset;
+    }
+
+    private static float ContrastRatio(Color foreground, Color background)
+    {
+        float lighter = Mathf.Max(RelativeLuminance(foreground), RelativeLuminance(background));
+        float darker = Mathf.Min(RelativeLuminance(foreground), RelativeLuminance(background));
+        return (lighter + 0.05f) / (darker + 0.05f);
+    }
+
+    private static float RelativeLuminance(Color color)
+    {
+        float Convert(float channel)
+        {
+            return channel <= 0.04045f
+                ? channel / 12.92f
+                : Mathf.Pow((channel + 0.055f) / 1.055f, 2.4f);
+        }
+
+        return 0.2126f * Convert(color.r) +
+               0.7152f * Convert(color.g) +
+               0.0722f * Convert(color.b);
     }
 
     private static void DestroyExistingGameManager()

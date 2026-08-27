@@ -25,6 +25,19 @@ public sealed class PortraitTextPresentation : MonoBehaviour
 
     public static readonly Vector2 ReferenceResolution = new Vector2(1080f, 2400f);
 
+    private static readonly Color32 TextColor = new Color32(242, 255, 255, 255);
+    private static readonly Color32 BackgroundColor = new Color32(5, 13, 17, 255);
+    private static readonly Color32 TitleColor = new Color32(12, 39, 47, 252);
+    private static readonly Color32 ContentColor = new Color32(7, 24, 30, 252);
+    private static readonly Color32 StaticColor = new Color32(14, 39, 47, 250);
+    private static readonly Color32 HeaderColor = new Color32(17, 53, 63, 255);
+    private static readonly Color32 ButtonColor = new Color32(18, 63, 77, 255);
+    private static readonly Color32 ReturnButtonColor = new Color32(37, 52, 66, 255);
+    private static readonly Color32 FocusColor = new Color32(27, 113, 132, 255);
+    private static readonly Color32 PressedColor = new Color32(14, 85, 103, 255);
+    private static readonly Color32 DisabledColor = new Color32(48, 57, 61, 255);
+    private static readonly Color32 BorderColor = new Color32(48, 154, 177, 210);
+
     private readonly Dictionary<string, RectTransform> rows = new Dictionary<string, RectTransform>();
     private readonly List<Selectable> selectables = new List<Selectable>();
     private readonly Vector3[] corners = new Vector3[4];
@@ -192,14 +205,14 @@ public sealed class PortraitTextPresentation : MonoBehaviour
         scaler.matchWidthOrHeight = 1f;
 
         RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
-        Image shield = CreateImage("Background", canvasRect, new Color32(3, 8, 10, 255));
+        Image shield = CreateImage("Background", canvasRect, BackgroundColor);
         shield.raycastTarget = true;
         Stretch(shield.rectTransform);
 
         safeRoot = CreateRect("SafeArea", canvasRect);
         ApplySafeArea();
 
-        artworkBackground = CreateImage("ArtworkBackground", safeRoot, new Color32(3, 8, 10, 255));
+        artworkBackground = CreateImage("ArtworkBackground", safeRoot, BackgroundColor);
         SetAnchors(artworkBackground.rectTransform, new Vector2(0f, 0.67f), Vector2.one);
 
         artwork = CreateImage("Artwork", artworkBackground.rectTransform, Color.white);
@@ -207,17 +220,19 @@ public sealed class PortraitTextPresentation : MonoBehaviour
         artwork.raycastTarget = false;
         Stretch(artwork.rectTransform, 24f);
 
-        titleBackground = CreateImage("TitleBackground", safeRoot, new Color32(5, 17, 20, 238));
+        titleBackground = CreateImage("TitleBackground", safeRoot, TitleColor);
         SetAnchors(titleBackground.rectTransform, new Vector2(0f, 0.67f), new Vector2(1f, 0.735f));
-        title = CreateText("Title", titleBackground.rectTransform, 48f, TextAlignmentOptions.Center);
+        AddOutline(titleBackground.gameObject, BorderColor, 3f);
+        title = CreateText("Title", titleBackground.rectTransform, 56f, TextAlignmentOptions.Center);
         title.fontStyle = FontStyles.Bold;
-        Stretch(title.rectTransform, 20f);
+        title.characterSpacing = 2f;
+        Stretch(title.rectTransform, 28f);
 
-        contentPanel = CreateImage("ContentPanel", safeRoot, new Color32(7, 18, 22, 252));
+        contentPanel = CreateImage("ContentPanel", safeRoot, ContentColor);
         SetAnchors(contentPanel.rectTransform, Vector2.zero, new Vector2(1f, 0.67f));
 
         RectTransform viewport = CreateRect("Viewport", contentPanel.rectTransform);
-        Stretch(viewport, 28f);
+        Stretch(viewport, 36f);
         viewport.gameObject.AddComponent<RectMask2D>();
 
         content = CreateRect("Content", viewport);
@@ -228,8 +243,8 @@ public sealed class PortraitTextPresentation : MonoBehaviour
         content.sizeDelta = Vector2.zero;
 
         VerticalLayoutGroup layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
-        layout.padding = new RectOffset(8, 8, 8, 8);
-        layout.spacing = 18f;
+        layout.padding = new RectOffset(12, 12, 12, 12);
+        layout.spacing = 20f;
         layout.childAlignment = TextAnchor.UpperCenter;
         layout.childControlHeight = true;
         layout.childControlWidth = true;
@@ -251,51 +266,61 @@ public sealed class PortraitTextPresentation : MonoBehaviour
 
     private RectTransform CreateStaticText(Entry entry)
     {
-        Image row = CreateImage("Text_" + entry.key, content, new Color32(12, 31, 37, 245));
+        Image row = CreateImage("Text_" + entry.key, content,
+            entry.header ? HeaderColor : StaticColor);
         float preferredHeight = entry.header
-            ? 126f
-            : Mathf.Max(150f, 58f + Mathf.Ceil(DisplayText(entry).Length / 22f) * 54f);
+            ? 136f
+            : Mathf.Max(168f, 68f + Mathf.Ceil(DisplayText(entry).Length / 20f) * 58f);
         AddLayout(row.gameObject, preferredHeight);
-        TMP_Text text = CreateText("Label", row.rectTransform, entry.header ? 44f : 38f,
+        AddOutline(row.gameObject, new Color32(34, 92, 105, 180), 2f);
+        TMP_Text text = CreateText("Label", row.rectTransform, entry.header ? 46f : 40f,
             entry.header ? TextAlignmentOptions.Center : TextAlignmentOptions.TopLeft);
         text.fontStyle = entry.header ? FontStyles.Bold : FontStyles.Normal;
+        text.lineSpacing = entry.header ? 0f : 8f;
         text.text = DisplayText(entry);
-        Stretch(text.rectTransform, 28f);
+        Stretch(text.rectTransform, 34f);
         return row.rectTransform;
     }
 
     private RectTransform CreateButton(Entry entry)
     {
-        Image row = CreateImage("Button_" + entry.key, content,
-            entry.disabled ? new Color32(40, 48, 50, 255) : new Color32(18, 65, 76, 255));
-        AddLayout(row.gameObject, 116f);
+        Color32 normalColor = IsReturnAction(entry.key) ? ReturnButtonColor : ButtonColor;
+        Image row = CreateImage("Button_" + entry.key, content, Color.white);
+        AddLayout(row.gameObject, 128f);
+        AddOutline(row.gameObject,
+            entry.disabled ? new Color32(92, 104, 108, 180) : BorderColor, 3f);
         Button button = row.gameObject.AddComponent<Button>();
         button.targetGraphic = row;
         button.interactable = !entry.disabled;
+        button.transition = Selectable.Transition.ColorTint;
+        button.colors = CreateColorBlock(normalColor);
         button.onClick.AddListener(() => entry.activate?.Invoke());
 
-        TMP_Text text = CreateText("Label", row.rectTransform, 40f, TextAlignmentOptions.Center);
+        TMP_Text text = CreateText("Label", row.rectTransform, 42f, TextAlignmentOptions.Center);
         text.fontStyle = FontStyles.Bold;
         text.text = DisplayText(entry);
-        Stretch(text.rectTransform, 24f);
+        Stretch(text.rectTransform, 30f);
         selectables.Add(button);
         return row.rectTransform;
     }
 
     private RectTransform CreateInput(Entry entry)
     {
-        Image row = CreateImage("Input_" + entry.key, content, new Color32(14, 42, 49, 255));
-        AddLayout(row.gameObject, 128f);
+        Image row = CreateImage("Input_" + entry.key, content, Color.white);
+        AddLayout(row.gameObject, 140f);
+        AddOutline(row.gameObject, BorderColor, 3f);
         TMP_InputField input = row.gameObject.AddComponent<TMP_InputField>();
         input.targetGraphic = row;
+        input.transition = Selectable.Transition.ColorTint;
+        input.colors = CreateColorBlock(StaticColor);
 
         RectTransform viewport = CreateRect("TextViewport", row.rectTransform);
-        Stretch(viewport, 28f);
+        Stretch(viewport, 34f);
         viewport.gameObject.AddComponent<RectMask2D>();
 
-        TMP_Text text = CreateText("Text", viewport, 38f, TextAlignmentOptions.MidlineLeft);
+        TMP_Text text = CreateText("Text", viewport, 40f, TextAlignmentOptions.MidlineLeft);
         Stretch(text.rectTransform);
-        TMP_Text placeholder = CreateText("Placeholder", viewport, 38f, TextAlignmentOptions.MidlineLeft);
+        TMP_Text placeholder = CreateText("Placeholder", viewport, 40f, TextAlignmentOptions.MidlineLeft);
         placeholder.text = entry.label;
         placeholder.color = new Color32(180, 199, 202, 255);
         Stretch(placeholder.rectTransform);
@@ -337,7 +362,7 @@ public sealed class PortraitTextPresentation : MonoBehaviour
         text.font = font;
         text.fontSharedMaterial = presentationFontMaterial;
         text.fontSize = size;
-        text.color = new Color32(242, 255, 255, 255);
+        text.color = TextColor;
         text.alignment = alignment;
         text.enableWordWrapping = true;
         text.overflowMode = TextOverflowModes.Overflow;
@@ -350,6 +375,34 @@ public sealed class PortraitTextPresentation : MonoBehaviour
         return string.IsNullOrWhiteSpace(entry.value)
             ? entry.label
             : entry.label + "，" + entry.value;
+    }
+
+    private static bool IsReturnAction(string key)
+    {
+        return !string.IsNullOrEmpty(key) &&
+               (key.Contains("back", StringComparison.Ordinal) || key == "main-quit");
+    }
+
+    private static ColorBlock CreateColorBlock(Color32 normalColor)
+    {
+        return new ColorBlock
+        {
+            normalColor = normalColor,
+            highlightedColor = FocusColor,
+            pressedColor = PressedColor,
+            selectedColor = FocusColor,
+            disabledColor = DisabledColor,
+            colorMultiplier = 1f,
+            fadeDuration = 0.08f
+        };
+    }
+
+    private static void AddOutline(GameObject target, Color32 color, float width)
+    {
+        Outline outline = target.AddComponent<Outline>();
+        outline.effectColor = color;
+        outline.effectDistance = new Vector2(width, -width);
+        outline.useGraphicAlpha = false;
     }
 
     private static RectTransform CreateRect(string name, Transform parent)
